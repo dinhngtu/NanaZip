@@ -6,10 +6,15 @@
 
 ## Development Team
 
+- AndromedaMelody, https://github.com/AndromedaMelody
 - Kenji Mouri, https://github.com/MouriNaruto
 - Sakura Neko, https://github.com/SakuraNeko
 
 ## Logo Designers
+
+### 2.x Series
+
+- Shomnipotence, https://github.com/Shomnipotence
 
 ### 1.x Series
 
@@ -21,7 +26,6 @@
 
 ## Contributors
 
-- AndromedaMelody, https://github.com/AndromedaMelody
 - Blueberryy, https://github.com/Blueberryy
 - ChuckMichael, https://github.com/ChuckMichael
 - dinhngtu, https://github.com/dinhngtu
