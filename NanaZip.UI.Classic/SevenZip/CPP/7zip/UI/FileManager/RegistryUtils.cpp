@@ -17,7 +17,7 @@ static LPCTSTR const kCUBasePath = REG_PATH_7Z;
 static LPCTSTR const kCU_FMPath = REG_PATH_7Z TEXT(STRING_PATH_SEPARATOR) TEXT("FM");
 // static LPCTSTR const kLM_Path = REG_PATH_7Z TEXT(STRING_PATH_SEPARATOR) TEXT("FM");
 static LPCTSTR const kDragDropKeyClsid = TEXT("{02F5A87F-D4CE-4706-B909-0E19E70DADF3}");
-static LPCTSTR const kDragDropKeyPath = TEXT("SOFTWARE\\Classes\\Directory\\shellex\\\\{02F5A87F-D4CE-4706-B909-0E19E70DADF3}");
+static LPCTSTR const kDragDropKeyPath = TEXT("SOFTWARE\\Classes\\Directory\\shellex\\CopyHookHandlers\\{02F5A87F-D4CE-4706-B909-0E19E70DADF3}");
 
 static LPCWSTR const kLangValueName = L"Lang";
 
@@ -210,6 +210,8 @@ bool WantFolderHistory() { return ReadFMOption(kFolderHistory); }
 bool WantLowercaseHashes() { return ReadFMOption(kLowercaseHashes); }
 
 void SaveFastDragDropEnable(bool enable) {
+    UNREFERENCED_PARAMETER(enable);
+    /*
     if (enable) {
         CKey key;
         key.Create(HKEY_CURRENT_USER, kDragDropKeyPath);
@@ -221,10 +223,11 @@ void SaveFastDragDropEnable(bool enable) {
             return;
         key.DeleteSubKey(kDragDropKeyPath);
     }
+    */
 }
 bool ReadFastDragDropEnable() {
     CKey key;
-    if (key.Open(HKEY_CURRENT_USER, kDragDropKeyPath, KEY_READ) == ERROR_SUCCESS)
+    if (key.Open(HKEY_LOCAL_MACHINE, kDragDropKeyPath, KEY_READ) == ERROR_SUCCESS)
         return true;
     return false;
 }

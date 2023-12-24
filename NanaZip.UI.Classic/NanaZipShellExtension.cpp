@@ -1088,7 +1088,7 @@ namespace NanaZip::ShellExtension
     };
 
     static const UINT COPYHOOK_TIMEOUT = 1000;
-    struct DECLSPEC_UUID(COPYHOOK_CLSID) CopyHook
+    struct DECLSPEC_UUID(COPYHOOK_UUID) CopyHook
         : public winrt::implements<CopyHook, ICopyHookW> {
 
         UINT STDMETHODCALLTYPE CopyCallback(
@@ -1099,18 +1099,27 @@ namespace NanaZip::ShellExtension
             DWORD dwSrcAttribs,
             _In_opt_ PCWSTR pszDestFile,
             DWORD dwDestAttribs) {
+            OutputDebugStringW(L"copy callback");
             UNREFERENCED_PARAMETER(wFlags);
             UNREFERENCED_PARAMETER(dwSrcAttribs);
             UNREFERENCED_PARAMETER(dwDestAttribs);
             if (wFunc == FO_COPY || wFunc == FO_MOVE) {
+                OutputDebugStringW(pszSrcFile);
+                OutputDebugStringW(pszDestFile);
                 UString srcFileName(::PathFindFileNameW(pszSrcFile));
-                if (srcFileName.IsPrefixedBy_Ascii_NoCase(COPYHOOK_CLSID ".")) {
+                OutputDebugStringW(L"srcFileName");
+                OutputDebugStringW(srcFileName.Ptr());
+                if (srcFileName.IsPrefixedBy_Ascii_NoCase(COPYHOOK_UUID ".")) {
                     int dotPos = srcFileName.ReverseFind_Dot();
                     UString hwndString = srcFileName.Ptr(dotPos + 1);
                     HWND hwndDest = reinterpret_cast<HWND>(::_wtoll(hwndString.Ptr()));
                     UString destPath(pszDestFile);
+                    OutputDebugStringW(L"destPath");
+                    OutputDebugStringW(destPath.Ptr());
                     if (SUCCEEDED(PathCchRemoveBackslash(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1)) &&
                         SUCCEEDED(PathCchRemoveFileSpec(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1))) {
+                        OutputDebugStringW(L"destPath2");
+                        OutputDebugStringW(destPath.Ptr());
                         CopyHookData data{};
                         if (SUCCEEDED(StringCchCopyW(&data.filename[0], ARRAY_SIZE(data.filename), destPath.Ptr()))) {
                             COPYDATASTRUCT cds{ COPYHOOK_COPY, sizeof(CopyHookData), &data };
@@ -1194,11 +1203,6 @@ EXTERN_C HRESULT STDAPICALLTYPE DllGetClassObject(
     if (!ppv)
     {
         return E_POINTER;
-    }
-
-    if (riid != IID_IClassFactory && riid != IID_IUnknown)
-    {
-        return E_NOINTERFACE;
     }
 
     try

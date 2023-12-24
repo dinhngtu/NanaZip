@@ -26,6 +26,8 @@
 
 #include "../GUI/ExtractRes.h"
 
+#include "../Explorer/CopyHook.h"
+
 #include "resource.h"
 
 #include "App.h"
@@ -1055,6 +1057,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             SWP_NOZORDER | SWP_NOACTIVATE);
 
         ::UpdateWindow(hWnd);
+        break;
+    }
+
+    case WM_COPYDATA:
+    {
+        OutputDebugStringW(L"WM_COPYDATA");
+        PCOPYDATASTRUCT lpCds = (PCOPYDATASTRUCT)lParam;
+        if (lpCds->dwData == 0x7F4FD2EA) {
+            // found COPYHOOK_COPY magic number
+            CPanel& panel = g_App.Panels[g_App.LastFocusedPanel];
+            CCopyToOptions options;
+            CopyHookData* data = static_cast<CopyHookData*>(lpCds->lpData);
+            OutputDebugStringW(data->filename);
+            options.folder = UString(data->filename);
+            CRecordVector<UInt32> indices;
+            panel.GetOperatedItemIndices(indices);
+            panel.CopyTo(options, indices, NULL);
+            return TRUE;
+        }
+        break;
     }
   }
   #ifndef _UNICODE
