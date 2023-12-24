@@ -108,6 +108,7 @@ bool CSettingsPage::OnInit()
 {
   _wasChanged = false;
   _largePages_wasChanged = false;
+  _fastDragDrop_wasChanged = false;
   /*
   _wasChanged_MemLimit = false;
   _memLimitStrings.Clear();
@@ -139,6 +140,8 @@ bool CSettingsPage::OnInit()
   CheckButton(IDX_SETTINGS_WANT_COPY_HISTORY, st.CopyHistory);
   CheckButton(IDX_SETTINGS_WANT_FOLDER_HISTORY, st.FolderHistory);
   CheckButton(IDX_SETTINGS_LOWERCASE_HASHES, st.LowercaseHashes);
+
+  CheckButton(IDX_SETTINGS_FAST_DRAG_DROP, ReadFastDragDropEnable());
 
   /*
   NCompression::CMemUse mu;
@@ -244,6 +247,11 @@ LONG CSettingsPage::OnApply()
     _largePages_wasChanged = false;
   }
   #endif
+
+  if (_fastDragDrop_wasChanged)
+  {
+      _fastDragDrop_wasChanged = false;
+  }
 
   /*
   if (_wasChanged_MemLimit)

@@ -1,7 +1,7 @@
 // #define g1xs 60
 
 CAPTION "Settings"
-BEGIN 
+BEGIN
   CONTROL  "Show "".."" item",      IDX_SETTINGS_SHOW_DOTS,            MY_CHECKBOX, m,  8, xc, 10
   CONTROL  "Show real file &icons", IDX_SETTINGS_SHOW_REAL_FILE_ICONS, MY_CHECKBOX, m, 22, xc, 10
   CONTROL  "&Full row select",      IDX_SETTINGS_FULL_ROW,             MY_CHECKBOX, m, 36, xc, 10
@@ -18,6 +18,8 @@ BEGIN
   CONTROL  "Want CopyHistory",   IDX_SETTINGS_WANT_COPY_HISTORY,      MY_CHECKBOX, m, 168, xc, 10
   CONTROL  "Want FolderHistory", IDX_SETTINGS_WANT_FOLDER_HISTORY,    MY_CHECKBOX, m, 182, xc, 10
   CONTROL  "Use Lowercase Hashes", IDX_SETTINGS_LOWERCASE_HASHES,     MY_CHECKBOX, m, 196, xc, 10
+
+  CONTROL  "Use fast drag-and-drop (Experimental)", IDX_SETTINGS_FAST_DRAG_DROP, MY_CHECKBOX, m, 218, xc, 10
 
   // LTEXT     "Memory usage for Compressing:", IDT_COMPRESS_MEMORY, m, 140, xc, 8
   // COMBOBOX  IDC_SETTINGS_MEM, m , 152, g1xs, yc - 152, MY_COMBO

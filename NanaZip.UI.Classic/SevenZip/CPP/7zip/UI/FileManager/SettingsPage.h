@@ -11,6 +11,7 @@ class CSettingsPage: public NWindows::NControl::CPropertyPage
 {
   bool _wasChanged;
   bool _largePages_wasChanged;
+  bool _fastDragDrop_wasChanged;
   /*
   bool _wasChanged_MemLimit;
   NWindows::NControl::CComboBox _memCombo;
