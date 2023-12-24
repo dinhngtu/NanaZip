@@ -14,6 +14,10 @@
 #pragma comment(lib, "Shlwapi.lib")
 
 #include <shobjidl_core.h>
+#include <ShlObj.h>
+#include <PathCch.h>
+#pragma comment(lib, "Pathcch.lib")
+#include <strsafe.h>
 
 #include <winrt/Windows.Foundation.h>
 
@@ -460,7 +464,7 @@ namespace NanaZip::ShellExtension
                     Folder.c_str(),
                     (this->m_CommandID == CommandID::Extract),
                     ((this->m_CommandID == CommandID::ExtractTo)
-                    && this->m_ElimDup.Val),
+                        && this->m_ElimDup.Val),
                     this->m_WriteZone);
 
                 break;
@@ -472,7 +476,7 @@ namespace NanaZip::ShellExtension
             case CommandID::CompressTo7zEmail:
             case CommandID::CompressToZipEmail:
             {
-                bool Email =(
+                bool Email = (
                     (this->m_CommandID == CommandID::CompressEmail) ||
                     (this->m_CommandID == CommandID::CompressTo7zEmail) ||
                     (this->m_CommandID == CommandID::CompressToZipEmail));
@@ -1043,13 +1047,13 @@ namespace NanaZip::ShellExtension
     };
 
     struct DECLSPEC_UUID("469D94E9-6AF4-4395-B396-99B1308F8CE5")
-        ClassFactory : public winrt::implements<
-        ClassFactory, IClassFactory>
+        ExplorerCommandRootClassFactory : public winrt::implements<
+        ExplorerCommandRootClassFactory, IClassFactory>
     {
     public:
 
         HRESULT STDMETHODCALLTYPE CreateInstance(
-            _In_opt_ IUnknown* pUnkOuter,
+            _In_opt_ IUnknown * pUnkOuter,
             _In_ REFIID riid,
             _COM_Outptr_ void** ppvObject) noexcept override
         {
@@ -1058,6 +1062,103 @@ namespace NanaZip::ShellExtension
             try
             {
                 return winrt::make<ExplorerCommandRoot>()->QueryInterface(
+                    riid, ppvObject);
+            }
+            catch (...)
+            {
+                return winrt::to_hresult();
+            }
+        }
+
+        HRESULT STDMETHODCALLTYPE LockServer(
+            _In_ BOOL fLock) noexcept override
+        {
+            if (fLock)
+            {
+                ++winrt::get_module_lock();
+            }
+            else
+            {
+                --winrt::get_module_lock();
+            }
+
+            return S_OK;
+        }
+    };
+
+    static const wchar_t* COPYHOOK_PREFIX = L"{7F4FD2EA-8CC8-43C4-8440-CD76805B4E95}";
+    static const ULONG_PTR COPYHOOK_COPY = 0x7F4FD2EA;
+    static const UINT COPYHOOK_TIMEOUT = 1000;
+
+    struct CopyHookData {
+        wchar_t filename[MAX_PATH];
+    };
+
+    struct DECLSPEC_UUID("7F4FD2EA-8CC8-43C4-8440-CD76805B4E95") CopyHook
+        : public winrt::implements<CopyHook, ICopyHookW> {
+
+        UINT STDMETHODCALLTYPE CopyCallback(
+            _In_opt_ HWND hwnd,
+            UINT wFunc,
+            UINT wFlags,
+            _In_ PCWSTR pszSrcFile,
+            DWORD dwSrcAttribs,
+            _In_opt_ PCWSTR pszDestFile,
+            DWORD dwDestAttribs) {
+            UNREFERENCED_PARAMETER(wFlags);
+            UNREFERENCED_PARAMETER(dwSrcAttribs);
+            UNREFERENCED_PARAMETER(dwDestAttribs);
+            if (wFunc == FO_COPY || wFunc == FO_MOVE) {
+                UString srcFileName(::PathFindFileNameW(pszSrcFile));
+                int dotPos = srcFileName.ReverseFind_Dot();
+                if (dotPos > 0) {
+                    UString stem = srcFileName.Left(dotPos);
+                    if (stem.IsEqualTo_NoCase(COPYHOOK_PREFIX)) {
+                        UString hwndString = srcFileName.Ptr(dotPos + 1);
+                        HWND hwndDest = reinterpret_cast<HWND>(::_wtoll(hwndString.Ptr()));
+                        UString destPath(pszDestFile);
+                        if (SUCCEEDED(PathCchRemoveBackslash(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1)) &&
+                            SUCCEEDED(PathCchRemoveFileSpec(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1))) {
+                            CopyHookData data{};
+                            if (SUCCEEDED(StringCchCopyW(&data.filename[0], ARRAY_SIZE(data.filename), destPath.Ptr()))) {
+                                COPYDATASTRUCT cds{ COPYHOOK_COPY, sizeof(CopyHookData), &data };
+                                DWORD_PTR res;
+                                if (SendMessageTimeoutW(
+                                    hwndDest,
+                                    WM_COPYDATA,
+                                    reinterpret_cast<WPARAM>(hwnd),
+                                    reinterpret_cast<LPARAM>(&cds),
+                                    SMTO_ABORTIFHUNG,
+                                    COPYHOOK_TIMEOUT,
+                                    &res) && res) {
+                                    return IDCANCEL;
+                                }
+                            }
+                        }
+                        return IDNO;
+                    }
+                }
+            }
+            return IDYES;
+        }
+    };
+
+    struct DECLSPEC_UUID("02F5A87F-D4CE-4706-B909-0E19E70DADF3")
+        CopyHookClassFactory : public winrt::implements<
+        CopyHookClassFactory, IClassFactory>
+    {
+    public:
+
+        HRESULT STDMETHODCALLTYPE CreateInstance(
+            _In_opt_ IUnknown * pUnkOuter,
+            _In_ REFIID riid,
+            _COM_Outptr_ void** ppvObject) noexcept override
+        {
+            UNREFERENCED_PARAMETER(pUnkOuter);
+
+            try
+            {
+                return winrt::make<CopyHook>()->QueryInterface(
                     riid, ppvObject);
             }
             catch (...)
@@ -1109,15 +1210,21 @@ EXTERN_C HRESULT STDAPICALLTYPE DllGetClassObject(
         return E_NOINTERFACE;
     }
 
-    if (rclsid != __uuidof(NanaZip::ShellExtension::ClassFactory))
-    {
-        return E_INVALIDARG;
-    }
-
     try
     {
-        return winrt::make<NanaZip::ShellExtension::ClassFactory>(
+        if (rclsid == __uuidof(NanaZip::ShellExtension::ExplorerCommandRootClassFactory))
+        {
+            return winrt::make<NanaZip::ShellExtension::ExplorerCommandRootClassFactory>(
             )->QueryInterface(riid, ppv);
+        }
+        else if (rclsid == __uuidof(NanaZip::ShellExtension::CopyHookClassFactory))
+        {
+            return winrt::make<NanaZip::ShellExtension::CopyHookClassFactory>(
+            )->QueryInterface(riid, ppv);
+        }
+        else {
+            return E_INVALIDARG;
+        }
     }
     catch (...)
     {
