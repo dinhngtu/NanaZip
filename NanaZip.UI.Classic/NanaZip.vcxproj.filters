@@ -1093,6 +1093,9 @@
       <Filter>AboutDialog</Filter>
     </ClInclude>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="SevenZip\CPP\7zip\UI\Explorer\CopyHook.h">
+      <Filter>SevenZip\UI\Explorer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="NanaZip.manifest" />

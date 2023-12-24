@@ -34,6 +34,7 @@
 #include "../SevenZip/CPP/7zip/UI/FileManager/FormatUtils.h"
 #include "../SevenZip/CPP/7zip/UI/FileManager/LangUtils.h"
 #include "../SevenZip/CPP/7zip/UI/Explorer/ContextMenuFlags.h"
+#include "../SevenZip/CPP/7zip/UI/Explorer/CopyHook.h"
 #include "../SevenZip/CPP/7zip/UI/Explorer/resource.h"
 
 namespace
@@ -1086,15 +1087,8 @@ namespace NanaZip::ShellExtension
         }
     };
 
-    static const wchar_t* COPYHOOK_PREFIX = L"{7F4FD2EA-8CC8-43C4-8440-CD76805B4E95}";
-    static const ULONG_PTR COPYHOOK_COPY = 0x7F4FD2EA;
     static const UINT COPYHOOK_TIMEOUT = 1000;
-
-    struct CopyHookData {
-        wchar_t filename[MAX_PATH];
-    };
-
-    struct DECLSPEC_UUID("7F4FD2EA-8CC8-43C4-8440-CD76805B4E95") CopyHook
+    struct DECLSPEC_UUID(COPYHOOK_CLSID) CopyHook
         : public winrt::implements<CopyHook, ICopyHookW> {
 
         UINT STDMETHODCALLTYPE CopyCallback(
@@ -1110,33 +1104,30 @@ namespace NanaZip::ShellExtension
             UNREFERENCED_PARAMETER(dwDestAttribs);
             if (wFunc == FO_COPY || wFunc == FO_MOVE) {
                 UString srcFileName(::PathFindFileNameW(pszSrcFile));
-                int dotPos = srcFileName.ReverseFind_Dot();
-                if (dotPos > 0) {
-                    UString stem = srcFileName.Left(dotPos);
-                    if (stem.IsEqualTo_NoCase(COPYHOOK_PREFIX)) {
-                        UString hwndString = srcFileName.Ptr(dotPos + 1);
-                        HWND hwndDest = reinterpret_cast<HWND>(::_wtoll(hwndString.Ptr()));
-                        UString destPath(pszDestFile);
-                        if (SUCCEEDED(PathCchRemoveBackslash(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1)) &&
-                            SUCCEEDED(PathCchRemoveFileSpec(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1))) {
-                            CopyHookData data{};
-                            if (SUCCEEDED(StringCchCopyW(&data.filename[0], ARRAY_SIZE(data.filename), destPath.Ptr()))) {
-                                COPYDATASTRUCT cds{ COPYHOOK_COPY, sizeof(CopyHookData), &data };
-                                DWORD_PTR res;
-                                if (SendMessageTimeoutW(
-                                    hwndDest,
-                                    WM_COPYDATA,
-                                    reinterpret_cast<WPARAM>(hwnd),
-                                    reinterpret_cast<LPARAM>(&cds),
-                                    SMTO_ABORTIFHUNG,
-                                    COPYHOOK_TIMEOUT,
-                                    &res) && res) {
-                                    return IDCANCEL;
-                                }
+                if (srcFileName.IsPrefixedBy_Ascii_NoCase(COPYHOOK_CLSID ".")) {
+                    int dotPos = srcFileName.ReverseFind_Dot();
+                    UString hwndString = srcFileName.Ptr(dotPos + 1);
+                    HWND hwndDest = reinterpret_cast<HWND>(::_wtoll(hwndString.Ptr()));
+                    UString destPath(pszDestFile);
+                    if (SUCCEEDED(PathCchRemoveBackslash(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1)) &&
+                        SUCCEEDED(PathCchRemoveFileSpec(destPath.Ptr_non_const(), static_cast<size_t>(destPath.Len()) + 1))) {
+                        CopyHookData data{};
+                        if (SUCCEEDED(StringCchCopyW(&data.filename[0], ARRAY_SIZE(data.filename), destPath.Ptr()))) {
+                            COPYDATASTRUCT cds{ COPYHOOK_COPY, sizeof(CopyHookData), &data };
+                            DWORD_PTR res;
+                            if (SendMessageTimeoutW(
+                                hwndDest,
+                                WM_COPYDATA,
+                                reinterpret_cast<WPARAM>(hwnd),
+                                reinterpret_cast<LPARAM>(&cds),
+                                SMTO_ABORTIFHUNG,
+                                COPYHOOK_TIMEOUT,
+                                &res) && res) {
+                                return IDCANCEL;
                             }
                         }
-                        return IDNO;
                     }
+                    return IDNO;
                 }
             }
             return IDYES;
