@@ -59,9 +59,8 @@ bool CLibrary::Load(CFSTR path) throw()
   return (_module != NULL);
 }
 
-bool MyGetModuleFileName(FString &path)
+bool MyGetModuleFileName2(HMODULE hModule, FString &path)
 {
-  HMODULE hModule = g_hInstance;
   path.Empty();
   #ifndef _UNICODE
   if (!g_IsNT)
@@ -88,6 +87,10 @@ bool MyGetModuleFileName(FString &path)
     }
   }
   return false;
+}
+
+bool MyGetModuleFileName(FString &path) {
+    return MyGetModuleFileName2(g_hInstance, path);
 }
 
 #ifndef _SFX
@@ -162,7 +165,7 @@ bool CLibrary::Load(CFSTR path) throw()
       options |= RTLD_GROUP; // mainly for solaris but not for HPUX
     #endif
   #endif
-  
+
   void *handler = dlopen(path, options);
 
   if (handler)

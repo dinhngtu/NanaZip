@@ -5,6 +5,7 @@
 #include "../../../Common/IntToString.h"
 
 #include "../../../Windows/Registry.h"
+#include "../../../Windows/DLL.h"
 
 #include "RegistryUtils.h"
 
@@ -12,12 +13,15 @@ using namespace NWindows;
 using namespace NRegistry;
 
 #define REG_PATH_7Z TEXT("Software") TEXT(STRING_PATH_SEPARATOR) TEXT("NanaZip")
+#define DRAG_DROP_CLSID "{02F5A87F-D4CE-4706-B909-0E19E70DADF3}"
 
 static LPCTSTR const kCUBasePath = REG_PATH_7Z;
 static LPCTSTR const kCU_FMPath = REG_PATH_7Z TEXT(STRING_PATH_SEPARATOR) TEXT("FM");
 // static LPCTSTR const kLM_Path = REG_PATH_7Z TEXT(STRING_PATH_SEPARATOR) TEXT("FM");
-static LPCTSTR const kDragDropKeyClsid = TEXT("{02F5A87F-D4CE-4706-B909-0E19E70DADF3}");
-static LPCTSTR const kDragDropKeyPath = TEXT("SOFTWARE\\Classes\\Directory\\shellex\\CopyHookHandlers\\{02F5A87F-D4CE-4706-B909-0E19E70DADF3}");
+static LPCTSTR const kDragDropClsidParentPath = TEXT("SOFTWARE\\Classes\\CLSID\\" DRAG_DROP_CLSID);
+static LPCTSTR const kDragDropClsidKeyPath = TEXT("SOFTWARE\\Classes\\CLSID\\" DRAG_DROP_CLSID "\\InprocServer32");
+// Folder\shellex doesn't work
+static LPCTSTR const kDragDropKeyPath = TEXT("SOFTWARE\\Classes\\Directory\\shellex\\CopyHookHandlers\\" DRAG_DROP_CLSID);
 
 static LPCWSTR const kLangValueName = L"Lang";
 
@@ -210,24 +214,41 @@ bool WantFolderHistory() { return ReadFMOption(kFolderHistory); }
 bool WantLowercaseHashes() { return ReadFMOption(kLowercaseHashes); }
 
 void SaveFastDragDropEnable(bool enable) {
-    UNREFERENCED_PARAMETER(enable);
-    /*
     if (enable) {
-        CKey key;
-        key.Create(HKEY_CURRENT_USER, kDragDropKeyPath);
-        key.SetValue(NULL, kDragDropKeyClsid);
+        FString dllPath;
+        {
+            // Unfortunately NanaZipShellExtension.dll isn't marked executable for non-NanaZip programs
+            // so this method is actually useless
+            NDLL::CLibrary shellLib;
+            if (!shellLib.Load(FTEXT("NanaZipShellExtension.dll")))
+                return;
+            if (!NDLL::MyGetModuleFileName2(shellLib, dllPath))
+                return;
+        }
+        {
+            CKey clsKey;
+            clsKey.Create(HKEY_CURRENT_USER, kDragDropClsidKeyPath);
+            clsKey.SetValue(NULL, dllPath.Ptr());
+            clsKey.SetValue(TEXT("ThreadingModel"), TEXT("Apartment"));
+        }
+        {
+            CKey key;
+            key.Create(HKEY_CURRENT_USER, kDragDropKeyPath);
+            key.SetValue(NULL, TEXT(DRAG_DROP_CLSID));
+        }
     }
     else {
         CKey key;
         if (key.Open(HKEY_CURRENT_USER, NULL, KEY_ALL_ACCESS) != ERROR_SUCCESS)
             return;
         key.DeleteSubKey(kDragDropKeyPath);
+        key.DeleteSubKey(kDragDropClsidKeyPath);
+        key.DeleteSubKey(kDragDropClsidParentPath);
     }
-    */
 }
 bool ReadFastDragDropEnable() {
     CKey key;
-    if (key.Open(HKEY_LOCAL_MACHINE, kDragDropKeyPath, KEY_READ) == ERROR_SUCCESS)
+    if (key.Open(HKEY_CURRENT_USER, kDragDropKeyPath, KEY_READ) == ERROR_SUCCESS)
         return true;
     return false;
 }

@@ -250,6 +250,8 @@ LONG CSettingsPage::OnApply()
 
   if (_fastDragDrop_wasChanged)
   {
+      bool enable = IsButtonCheckedBool(IDX_SETTINGS_FAST_DRAG_DROP);
+      SaveFastDragDropEnable(enable);
       _fastDragDrop_wasChanged = false;
   }
 
@@ -359,6 +361,10 @@ bool CSettingsPage::OnButtonClicked(int buttonID, HWND buttonHWND)
 
     case IDX_SETTINGS_LARGE_PAGES:
       _largePages_wasChanged = true;
+      break;
+
+    case IDX_SETTINGS_FAST_DRAG_DROP:
+      _fastDragDrop_wasChanged = true;
       break;
 
     default:

@@ -76,6 +76,7 @@ public:
 #endif
 
 bool MyGetModuleFileName(FString &path);
+bool MyGetModuleFileName2(HMODULE hModule, FString &path);
 
 FString GetModuleDirPrefix();
 
