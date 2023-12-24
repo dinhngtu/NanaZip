@@ -322,6 +322,7 @@ class CPanel: public NWindows::NControl::CWindow2
   void OnNotifyActivateItems();
   bool OnNotifyList(LPNMHDR lParam, LRESULT &result);
   void OnDrag(LPNMLISTVIEW nmListView);
+  void OnDragFast(LPNMLISTVIEW nmListView);
   bool OnKeyDown(LPNMLVKEYDOWN keyDownInfo, LRESULT &result);
   BOOL OnBeginLabelEdit(LV_DISPINFOW * lpnmh);
   BOOL OnEndLabelEdit(LV_DISPINFOW * lpnmh);

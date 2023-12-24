@@ -24,6 +24,8 @@
 
 #include "../Agent/IFolderArchive.h"
 
+#include "../Explorer/CopyHook.h"
+
 #include "App.h"
 #include "ExtractCallback.h"
 #include "FSFolder.h"
@@ -149,6 +151,20 @@ LRESULT CPanel::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
       if (OnContextMenu(HANDLE(wParam), GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
         return 0;
       break;
+    case WM_COPYDATA:
+    {
+        PCOPYDATASTRUCT lpCds = (PCOPYDATASTRUCT)lParam;
+        if (lpCds->dwData == 0x7F4FD2EA) {
+            // found COPYHOOK_COPY magic number
+            CCopyToOptions options;
+            CopyHookData* data = static_cast<CopyHookData*>(lpCds->lpData);
+            options.folder = UString(data->filename);
+            CRecordVector<UInt32> indices;
+            GetOperatedItemIndices(indices);
+            CopyTo(options, indices, NULL);
+        }
+        break;
+    }
     /*
     case WM_DROPFILES:
       CompressDropFiles(HDROP(wParam));

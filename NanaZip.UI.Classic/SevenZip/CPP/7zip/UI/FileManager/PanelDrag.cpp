@@ -18,10 +18,13 @@
 #include "../Common/CompressCall.h"
 #include "../Common/ExtractingFilePath.h"
 
+#include "../Explorer/CopyHook.h"
+
 #include "MessagesDialog.h"
 
 #include "App.h"
 #include "EnumFormatEtc.h"
+#include "RegistryUtils.h"
 
 using namespace NWindows;
 using namespace NFile;
@@ -333,6 +336,9 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
   FString dirPrefix;
   CTempDir tempDirectory;
 
+  bool fastDrag = ReadFastDragDropEnable();
+  FString fakeDirPath;
+
   bool isFSFolder = IsFSFolder();
   if (isFSFolder)
     dirPrefix = us2fs(GetFsPath());
@@ -346,6 +352,17 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
     dirPrefix = tempDirectory.GetPath();
     // dirPrefix2 = dirPrefix;
     NFile::NName::NormalizeDirPathPrefix(dirPrefix);
+    if (fastDrag) {
+        CTempDir fakeDirectory;
+        FString fakeDirName(FTEXT(COPYHOOK_CLSID) FTEXT("."));
+        fakeDirName.Add_UInt64(reinterpret_cast<UInt64>(_window));
+        if (!fakeDirectory.Create(fakeDirName))
+        {
+            MessageBox_Error(L"Can't create fake folder");
+            return;
+        }
+        fakeDirPath = fakeDirectory.GetPath();
+    }
   }
 
   CDataObject *dataObjectSpec = new CDataObject;
@@ -353,6 +370,10 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
 
   {
     UStringVector names;
+
+    if (fastDrag) {
+        names.Add(fs2us(fakeDirPath));
+    }
 
     // names variable is     USED for drag and drop from NanaZip to Explorer or to NanaZip archive folder.
     // names variable is NOT USED for drag and drop from NanaZip to NanaZip File System folder.
@@ -393,7 +414,8 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
 
   CDropSource *dropSourceSpec = new CDropSource;
   CMyComPtr<IDropSource> dropSource = dropSourceSpec;
-  dropSourceSpec->NeedExtract = !isFSFolder;
+  // if fast dragging then we wait until getting WM_COPYDATA
+  dropSourceSpec->NeedExtract = !fastDrag && !isFSFolder;
   dropSourceSpec->Panel = this;
   dropSourceSpec->Indices = indices;
   dropSourceSpec->Folder = fs2us(dirPrefix);
