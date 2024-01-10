@@ -362,8 +362,6 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
       fakeDirPath += FTEXT(COPYHOOK_UUID) FTEXT(".");
       fakeDirPath.Add_UInt64(reinterpret_cast<UInt64>(g_App._window.operator HWND()));
       //fakeDirPath.Add_UInt64(reinterpret_cast<UInt64>(_window));
-      OutputDebugStringW(L"fakeDirPath");
-      OutputDebugStringW(fakeDirPath.Ptr());
       if (!CreateDir(fakeDirPath))
       {
           MessageBox_Error(L"Can't create fake folder");
