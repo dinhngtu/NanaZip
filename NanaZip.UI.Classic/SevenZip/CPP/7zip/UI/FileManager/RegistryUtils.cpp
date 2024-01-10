@@ -181,6 +181,7 @@ void CFmSettings::Load()
     // Underline = false;
 
     ShowSystemMenu = false;
+    FastDragDrop = false;
 
     CKey key;
     if (key.Open(HKEY_CURRENT_USER, kCU_FMPath, KEY_READ) == ERROR_SUCCESS)
@@ -199,6 +200,7 @@ void CFmSettings::Load()
         // ReadOption(key, kUnderline, Underline);
 
     ReadOption(key, kShowSystemMenu, ShowSystemMenu );
+    ReadOption(key, kFastDragDrop, FastDragDrop);
     }
 }
 
