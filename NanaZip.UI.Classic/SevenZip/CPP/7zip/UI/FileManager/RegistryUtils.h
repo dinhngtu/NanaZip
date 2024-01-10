@@ -33,6 +33,7 @@ struct CFmSettings
   // bool Underline;
 
   bool ShowSystemMenu;
+  bool FastDragDrop;
 
   void Save() const;
   void Load();
@@ -49,9 +50,6 @@ bool WantPathHistory();
 bool WantCopyHistory();
 bool WantFolderHistory();
 bool WantLowercaseHashes();
-
-bool ReadFastDragDropEnable();
-void SaveFastDragDropEnable(bool enable);
 
 void SaveFlatView(UInt32 panelIndex, bool enable);
 bool ReadFlatView(UInt32 panelIndex);

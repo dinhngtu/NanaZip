@@ -39,6 +39,7 @@ static LPCTSTR const kAlternativeSelection = TEXT("AlternativeSelection");
 // static LPCTSTR const kUnderline = TEXT("Underline");
 
 static LPCTSTR const kShowSystemMenu = TEXT("ShowSystemMenu");
+static LPCTSTR const kFastDragDrop = TEXT("FastDragDrop");
 
 // static LPCTSTR const kLockMemoryAdd = TEXT("LockMemoryAdd");
 static LPCTSTR const kLargePages = TEXT("LargePages");
@@ -161,6 +162,7 @@ void CFmSettings::Save() const
     // SaveOption(kUnderline, Underline);
 
     SaveOption(kShowSystemMenu, ShowSystemMenu);
+    SaveOption(kFastDragDrop, FastDragDrop);
 }
 
 void CFmSettings::Load()
@@ -212,46 +214,6 @@ bool WantPathHistory() { return ReadFMOption(kPathHistory); }
 bool WantCopyHistory() { return ReadFMOption(kCopyHistory); }
 bool WantFolderHistory() { return ReadFMOption(kFolderHistory); }
 bool WantLowercaseHashes() { return ReadFMOption(kLowercaseHashes); }
-
-void SaveFastDragDropEnable(bool enable) {
-    if (enable) {
-        FString dllPath;
-        {
-            // Unfortunately NanaZipShellExtension.dll isn't marked executable for non-NanaZip programs
-            // so this method is actually useless
-            NDLL::CLibrary shellLib;
-            if (!shellLib.Load(FTEXT("NanaZipShellExtension.dll")))
-                return;
-            if (!NDLL::MyGetModuleFileName2(shellLib, dllPath))
-                return;
-        }
-        {
-            CKey clsKey;
-            clsKey.Create(HKEY_CURRENT_USER, kDragDropClsidKeyPath);
-            clsKey.SetValue(NULL, dllPath.Ptr());
-            clsKey.SetValue(TEXT("ThreadingModel"), TEXT("Apartment"));
-        }
-        {
-            CKey key;
-            key.Create(HKEY_CURRENT_USER, kDragDropKeyPath);
-            key.SetValue(NULL, TEXT(DRAG_DROP_CLSID));
-        }
-    }
-    else {
-        CKey key;
-        if (key.Open(HKEY_CURRENT_USER, NULL, KEY_ALL_ACCESS) != ERROR_SUCCESS)
-            return;
-        key.DeleteSubKey(kDragDropKeyPath);
-        key.DeleteSubKey(kDragDropClsidKeyPath);
-        key.DeleteSubKey(kDragDropClsidParentPath);
-    }
-}
-bool ReadFastDragDropEnable() {
-    CKey key;
-    if (key.Open(HKEY_CURRENT_USER, kDragDropKeyPath, KEY_READ) == ERROR_SUCCESS)
-        return true;
-    return false;
-}
 
 static CSysString GetFlatViewName(UInt32 panelIndex)
 {

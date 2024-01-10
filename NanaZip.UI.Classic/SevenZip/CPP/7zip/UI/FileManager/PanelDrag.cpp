@@ -336,7 +336,8 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
   FString dirPrefix;
   CTempDir tempDirectory;
 
-  bool fastDrag = ReadFastDragDropEnable();
+  CFmSettings st;
+  st.Load();
   FString fakeDirPath;
 
   bool isFSFolder = IsFSFolder();
@@ -352,7 +353,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
     dirPrefix = tempDirectory.GetPath();
     // dirPrefix2 = dirPrefix;
     NFile::NName::NormalizeDirPathPrefix(dirPrefix);
-    if (fastDrag) {
+    if (st.FastDragDrop) {
       fakeDirPath = dirPrefix;
       /*
       if (!MyGetTempPath(fakeDirPath))
@@ -380,7 +381,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
     // names variable is     USED for drag and drop from NanaZip to Explorer or to NanaZip archive folder.
     // names variable is NOT USED for drag and drop from NanaZip to NanaZip File System folder.
 
-    if (!isFSFolder && fastDrag) {
+    if (!isFSFolder && st.FastDragDrop) {
       names.Add(fs2us(fakeDirPath));
     }
     else {
@@ -421,7 +422,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */)
 
   CDropSource *dropSourceSpec = new CDropSource;
   CMyComPtr<IDropSource> dropSource = dropSourceSpec;
-  dropSourceSpec->NeedExtract = !fastDrag && !isFSFolder;
+  dropSourceSpec->NeedExtract = !st.FastDragDrop && !isFSFolder;
   dropSourceSpec->Panel = this;
   dropSourceSpec->Indices = indices;
   dropSourceSpec->Folder = fs2us(dirPrefix);
