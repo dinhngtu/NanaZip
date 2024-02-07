@@ -1,4 +1,4 @@
-﻿// MainAr.cpp
+// MainAr.cpp
 
 #include "StdAfx.h"
 
@@ -124,6 +124,14 @@ int Z7_CDECL main
     FlushStreams();
     *g_ErrStream
       << "Cannot enable security mitigations: "
+      << NError::MyFormatMessage(GetLastError())
+      << endl;
+  }
+  if (!::NanaZipDisableSyscalls())
+  {
+    FlushStreams();
+    *g_ErrStream
+      << "Cannot enable syscall mitigation: "
       << NError::MyFormatMessage(GetLastError())
       << endl;
   }

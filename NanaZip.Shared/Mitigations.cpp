@@ -151,3 +151,23 @@ EXTERN_C BOOL WINAPI NanaZipDisableChildProcesses()
 
     return TRUE;
 }
+
+EXTERN_C BOOL WINAPI NanaZipDisableSyscalls()
+{
+    if (!::IsWindows8OrLater())
+    {
+        return TRUE;
+    }
+
+    PROCESS_MITIGATION_SYSTEM_CALL_DISABLE_POLICY Policy = { 0 };
+    Policy.DisallowWin32kSystemCalls = 1;
+    if (!::SetProcessMitigationPolicyWrapper(
+        ProcessSystemCallDisablePolicy,
+        &Policy,
+        sizeof(PROCESS_MITIGATION_SYSTEM_CALL_DISABLE_POLICY)))
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}

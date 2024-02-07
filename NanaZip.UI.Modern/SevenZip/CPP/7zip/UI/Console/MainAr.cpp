@@ -85,6 +85,14 @@ int MY_CDECL main
       << NError::MyFormatMessage(GetLastError())
       << endl;
   }
+  if (!::NanaZipDisableSyscalls())
+  {
+    FlushStreams();
+    *g_ErrStream
+      << "Cannot enable syscall mitigations: "
+      << NError::MyFormatMessage(GetLastError())
+      << endl;
+  }
 
   NConsoleClose::CCtrlHandlerSetter ctrlHandlerSetter;
   int res = 0;
