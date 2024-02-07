@@ -73,7 +73,7 @@ void ReplaceToOsSlashes_Remove_TailSlash(UString &name, bool
     }
   }
   #endif
-    
+
   if (name.Back() == kOsPathSepar)
     name.DeleteBack();
 }
@@ -108,18 +108,12 @@ bool HasTailSlash(const AString &name, UINT
   #endif
   )
 {
+  #if defined(_WIN32) && !defined(UNDER_CE)
+    UNREFERENCED_PARAMETER(codePage);
+  #endif
   if (name.IsEmpty())
     return false;
-  char c;
-    #if defined(_WIN32) && !defined(UNDER_CE)
-    if (codePage != CP_UTF8)
-      c = *CharPrevExA((WORD)codePage, name, name.Ptr(name.Len()), 0);
-    else
-    #endif
-    {
-      c = name.Back();
-    }
-  return (c == '/');
+  return (name.Back() == '/');
 }
 
 
