@@ -53,6 +53,38 @@ namespace
             dwLength);
     }
 
+    static BOOL GetProcessMitigationPolicyWrapper(
+        _In_ HANDLE hProcess,
+        _In_ PROCESS_MITIGATION_POLICY MitigationPolicy,
+        _Out_writes_bytes_(dwLength) PVOID lpBuffer,
+        _In_ SIZE_T dwLength)
+    {
+        static FARPROC CachedProcAddress = ([]() -> FARPROC
+        {
+            HMODULE ModuleHandle = ::GetKernel32ModuleHandle();
+            if (ModuleHandle)
+            {
+                return ::GetProcAddress(
+                    ModuleHandle,
+                    "GetProcessMitigationPolicy");
+            }
+            return nullptr;
+        }());
+
+        if (!CachedProcAddress)
+        {
+            return FALSE;
+        }
+
+        using ProcType = decltype(::GetProcessMitigationPolicy)*;
+
+        return reinterpret_cast<ProcType>(CachedProcAddress)(
+            hProcess,
+            MitigationPolicy,
+            lpBuffer,
+            dwLength);
+    }
+
     static bool IsWindows8OrLater()
     {
         static bool CachedResult = ::MileIsWindowsVersionAtLeast(6, 2, 0);
@@ -76,6 +108,12 @@ namespace
     static bool IsWindows10_1709OrLater()
     {
         static bool CachedResult = ::MileIsWindowsVersionAtLeast(10, 0, 16299);
+        return CachedResult;
+    }
+
+    static bool IsWindows10_20H1OrLater()
+    {
+        static bool CachedResult = ::MileIsWindowsVersionAtLeast(10, 0, 19041);
         return CachedResult;
     }
 }
@@ -126,6 +164,24 @@ EXTERN_C BOOL WINAPI NanaZipEnableMitigations()
             sizeof(PROCESS_MITIGATION_IMAGE_LOAD_POLICY)))
         {
             return FALSE;
+        }
+    }
+
+    if (IsWindows10_20H1OrLater())
+    {
+        PROCESS_MITIGATION_USER_SHADOW_STACK_POLICY Policy = { 0 };
+        if (GetProcessMitigationPolicyWrapper(
+            GetCurrentProcess(),
+            ProcessUserShadowStackPolicy,
+            &Policy,
+            sizeof(Policy)) && Policy.EnableUserShadowStack) {
+            Policy.EnableUserShadowStackStrictMode = 1;
+            if (!SetProcessMitigationPolicyWrapper(
+                ProcessUserShadowStackPolicy,
+                &Policy,
+                sizeof(Policy))) {
+                return FALSE;
+            }
         }
     }
 
