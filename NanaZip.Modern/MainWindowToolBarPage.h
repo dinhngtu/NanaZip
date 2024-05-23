@@ -62,7 +62,7 @@ namespace winrt::NanaZip::Modern::implementation
             winrt::IInspectable const& sender,
             winrt::RoutedEventArgs const& e);
 
-        void BenchmarkButtonClick(
+        void SplitButtonClick(
             winrt::IInspectable const& sender,
             winrt::RoutedEventArgs const& e);
 
