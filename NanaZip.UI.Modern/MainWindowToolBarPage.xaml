@@ -23,41 +23,43 @@
         Grid.Column="0"
         HorizontalAlignment="Left"
         Background="Transparent"
-        DefaultLabelPosition="Collapsed"
+        DefaultLabelPosition="Right"
         IsDynamicOverflowEnabled="False"
         IsOpen="False">
         <AppBarButton
-          x:Name="AddButton"
+          x:Name="OpenParentFolderButton"
           Width="48"
+          LabelPosition="Collapsed"
+          AutomationProperties.Name="[Up]"
+          Click="OpenParentFolderButtonClick"
+          Icon="Up"
+          ToolTipService.ToolTip="[Up]" />
+        <AppBarSeparator />
+        <AppBarButton
+          x:Name="AddButton"
+          Label="Add"
           AutomationProperties.Name="[Add]"
           Click="AddButtonClick"
           Icon="Add"
           ToolTipService.ToolTip="[Add]" />
         <AppBarButton
           x:Name="ExtractButton"
-          Width="48"
+          Label="Extract"
           AutomationProperties.Name="[Extract]"
           Click="ExtractButtonClick"
           Icon="MoveToFolder"
           ToolTipService.ToolTip="[Extract]" />
         <AppBarButton
           x:Name="TestButton"
-          Width="48"
+          Label="Test"
           AutomationProperties.Name="[Test]"
           Click="TestButtonClick"
           Icon="Accept"
           ToolTipService.ToolTip="[Test]" />
         <AppBarSeparator />
         <AppBarButton
-          x:Name="CopyButton"
-          Width="48"
-          AutomationProperties.Name="[Copy]"
-          Click="CopyButtonClick"
-          Icon="Copy"
-          ToolTipService.ToolTip="[Copy]" />
-        <AppBarButton
           x:Name="MoveButton"
-          Width="48"
+          Label="Move to..."
           AutomationProperties.Name="[Move]"
           Click="MoveButtonClick"
           ToolTipService.ToolTip="[Move]">
@@ -66,52 +68,56 @@
           </AppBarButton.Content>
         </AppBarButton>
         <AppBarButton
+          x:Name="CopyButton"
+          Label="Copy to..."
+          AutomationProperties.Name="[Copy]"
+          Click="CopyButtonClick"
+          Icon="Copy"
+          ToolTipService.ToolTip="[Copy]" />
+        <AppBarButton
           x:Name="DeleteButton"
-          Width="48"
+          Label="Delete"
           AutomationProperties.Name="[Delete]"
           Click="DeleteButtonClick"
           Icon="Delete"
           ToolTipService.ToolTip="[Delete]" />
         <AppBarButton
           x:Name="InfoButton"
-          Width="48"
+          Label="Properties"
           AutomationProperties.Name="[Info]"
           Click="InfoButtonClick"
-          ToolTipService.ToolTip="[Info]">
-          <AppBarButton.Content>
-            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE946;" />
-          </AppBarButton.Content>
-        </AppBarButton>
+          Icon="Repair"
+          ToolTipService.ToolTip="[Info]"/>
         <AppBarSeparator />
         <AppBarButton
           x:Name="OptionsButton"
-          Width="48"
+          Label="Options"
           AutomationProperties.Name="[Options]"
           Click="OptionsButtonClick"
           Icon="Setting"
           ToolTipService.ToolTip="[Options]" />
         <AppBarButton
-          x:Name="BenchmarkButton"
-          Width="48"
-          AutomationProperties.Name="[Benchmark]"
-          Click="BenchmarkButtonClick"
-          Icon="Play"
-          ToolTipService.ToolTip="[Benchmark]" />
-        <AppBarButton
-          x:Name="AboutButton"
-          Width="48"
-          AutomationProperties.Name="[About]"
-          Click="AboutButtonClick"
-          Icon="Help"
-          ToolTipService.ToolTip="[About]" />
+          x:Name="SplitButton"
+          Label="2 Panels"
+          AutomationProperties.Name="[Split]"
+          Click="SplitButtonClick"
+          Icon="OpenPane"
+          ToolTipService.ToolTip="[Split]" />
         <AppBarSeparator />
         <AppBarButton
           x:Uid="/MainWindowToolBarPage/MoreButton"
-          Width="48"
+          Label="More"
           AutomationProperties.Name="[More]"
           Click="MoreButtonClick"
           Icon="More"
           ToolTipService.ToolTip="[More]" />
+        <AppBarButton
+          x:Name="AboutButton"
+          Label="About"
+          AutomationProperties.Name="[About]"
+          Click="AboutButtonClick"
+          Icon="Help"
+          ToolTipService.ToolTip="[About]" />
       </CommandBar>
       <Button
         x:Name="SponsorButton"
