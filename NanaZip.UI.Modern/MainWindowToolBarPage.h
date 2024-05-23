@@ -29,6 +29,10 @@ namespace winrt::NanaZip::Modern::implementation
             winrt::IInspectable const& sender,
             winrt::RoutedEventArgs const& e);
 
+        void OpenParentFolderButtonClick(
+            winrt::IInspectable const& sender,
+            winrt::RoutedEventArgs const& e);
+
         void AddButtonClick(
             winrt::IInspectable const& sender,
             winrt::RoutedEventArgs const& e);
@@ -61,7 +65,7 @@ namespace winrt::NanaZip::Modern::implementation
             winrt::IInspectable const& sender,
             winrt::RoutedEventArgs const& e);
 
-        void BenchmarkButtonClick(
+        void SplitButtonClick(
             winrt::IInspectable const& sender,
             winrt::RoutedEventArgs const& e);
 

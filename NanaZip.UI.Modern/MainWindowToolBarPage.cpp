@@ -78,7 +78,8 @@ namespace
             File = 0,
             Edit,
             View,
-            Bookmarks
+            Bookmarks,
+            Benchmark,
         };
     }
 }
@@ -96,8 +97,9 @@ namespace winrt::NanaZip::Modern::implementation
     {
         MainWindowToolBarPageT::InitializeComponent();
 
-        DWORD ToolBarResources[10] =
+        DWORD ToolBarResources[11] =
         {
+            IDM_OPEN_PARENT_FOLDER,
             IDS_ADD,
             IDS_EXTRACT,
             IDS_TEST,
@@ -106,12 +108,13 @@ namespace winrt::NanaZip::Modern::implementation
             IDS_BUTTON_DELETE,
             IDS_BUTTON_INFO,
             IDM_OPTIONS,
-            IDM_BENCHMARK,
+            IDM_VIEW_TWO_PANELS,
             IDM_ABOUT
         };
 
-        winrt::AppBarButton ToolBarButtons[10] =
+        winrt::AppBarButton ToolBarButtons[11] =
         {
+            this->OpenParentFolderButton(),
             this->AddButton(),
             this->ExtractButton(),
             this->TestButton(),
@@ -120,7 +123,7 @@ namespace winrt::NanaZip::Modern::implementation
             this->DeleteButton(),
             this->InfoButton(),
             this->OptionsButton(),
-            this->BenchmarkButton(),
+            this->SplitButton(),
             this->AboutButton()
         };
 
@@ -159,6 +162,22 @@ namespace winrt::NanaZip::Modern::implementation
         UNREFERENCED_PARAMETER(e);
 
         this->RefreshSponsorButtonContent();
+    }
+
+    void MainWindowToolBarPage::OpenParentFolderButtonClick(
+        winrt::IInspectable const& sender,
+        winrt::RoutedEventArgs const& e)
+    {
+        UNREFERENCED_PARAMETER(sender);
+        UNREFERENCED_PARAMETER(e);
+
+        ::PostMessageW(
+            this->m_WindowHandle,
+            WM_COMMAND,
+            MAKEWPARAM(
+                IDM_OPEN_PARENT_FOLDER,
+                BN_CLICKED),
+            0);
     }
 
     void MainWindowToolBarPage::AddButtonClick(
@@ -289,7 +308,7 @@ namespace winrt::NanaZip::Modern::implementation
             0);
     }
 
-    void MainWindowToolBarPage::BenchmarkButtonClick(
+    void MainWindowToolBarPage::SplitButtonClick(
         winrt::IInspectable const& sender,
         winrt::RoutedEventArgs const& e)
     {
@@ -300,7 +319,7 @@ namespace winrt::NanaZip::Modern::implementation
             this->m_WindowHandle,
             WM_COMMAND,
             MAKEWPARAM(
-                IDM_BENCHMARK,
+                IDM_VIEW_TWO_PANELS,
                 BN_CLICKED),
             0);
     }
@@ -376,6 +395,13 @@ namespace winrt::NanaZip::Modern::implementation
                 g_MoreMenu,
                 MenuIndex::Bookmarks)),
             MenuIndex::Bookmarks);
+        ::SendMessageW(
+            this->m_WindowHandle,
+            WM_INITMENUPOPUP,
+            reinterpret_cast<WPARAM>(::GetSubMenu(
+                g_MoreMenu,
+                MenuIndex::Benchmark)),
+            MenuIndex::Benchmark);
 
         WPARAM Command = ::TrackPopupMenuEx(
             g_MoreMenu,
