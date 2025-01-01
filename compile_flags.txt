@@ -1,0 +1,14 @@
+﻿-IC:\Users\dinhn\.nuget\packages\mile.detours\1.0.2180\Source\Native
+-IC:\Users\dinhn\.nuget\packages\mile.json\1.0.1057\Source\Native
+-IC:\Users\dinhn\.nuget\packages\mile.mobility\1.1.544\Source\Native
+-IC:\Users\dinhn\.nuget\packages\mile.windows.helpers\1.0.1171\Source\Native
+-IC:\Users\dinhn\.nuget\packages\mile.windows.internal\1.0.3586\Source\Native
+-IC:\Users\dinhn\.nuget\packages\mile.xaml\2.5.1616\Source\Native
+-IK7Base/
+-IK7User/
+-IMile.Project.Windows/
+-INanaZip.Specification/
+-IOutput/Objects/Release/NanaZip.Windows/x64/Generated Files
+-std=c++20
+-Wall
+-Wextra
