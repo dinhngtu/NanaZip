@@ -1796,7 +1796,7 @@ STDMETHODIMP CAgent::Extract(
       false, // multiArchives
       pathMode,
       overwriteMode,
-      NExtract::NZoneIdMode::kNone,
+      NExtract::NZoneIdMode::kOffice,  // NanaZip Modification
       k_keepEmptyDirPrefixes);
 
   CExtractNtOptions extractNtOptions;
