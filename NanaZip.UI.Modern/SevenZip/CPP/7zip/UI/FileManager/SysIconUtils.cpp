@@ -21,24 +21,15 @@ extern bool g_IsNT;
 
 int GetIconIndexForCSIDL(int csidl)
 {
-  LPITEMIDLIST pidl = 0;
-  SHGetSpecialFolderLocation(NULL, csidl, &pidl);
-  if (pidl)
-  {
-    SHFILEINFO shellInfo;
-    SHGetFileInfo((LPCTSTR)(const void *)(pidl), FILE_ATTRIBUTE_NORMAL,
-      &shellInfo, sizeof(shellInfo),
-      SHGFI_PIDL | SHGFI_SYSICONINDEX);
-    IMalloc  *pMalloc;
-    SHGetMalloc(&pMalloc);
-    if (pMalloc)
-    {
-      pMalloc->Free(pidl);
-      pMalloc->Release();
-    }
-    return shellInfo.iIcon;
-  }
-  return 0;
+  SHFILEINFOW shellInfo = {0};
+  UNREFERENCED_PARAMETER(csidl);
+  ::SHGetFileInfoW(
+    L"C:\\Windows\\",
+    FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_DIRECTORY,
+    &shellInfo,
+    sizeof(shellInfo),
+    SHGFI_USEFILEATTRIBUTES | SHGFI_SYSICONINDEX);
+  return shellInfo.iIcon;
 }
 
 #ifndef _UNICODE
