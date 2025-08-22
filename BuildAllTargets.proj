@@ -61,18 +61,6 @@
   </Target>
   <Target Name="Build">
     <MSBuild
-      Projects="$(MSBuildThisFileDirectory)NanaZipPackage\NanaZipPackage.wapproj"
-      Targets="Build"
-      BuildInParallel="True"
-      StopOnFirstFailure="True"
-      Properties="PreferredToolArchitecture=x64;Configuration=Debug;Platform=x64" />
-    <MSBuild
-      Projects="$(MSBuildThisFileDirectory)NanaZipPackage\NanaZipPackage.wapproj"
-      Targets="Build"
-      BuildInParallel="True"
-      StopOnFirstFailure="True"
-      Properties="PreferredToolArchitecture=x64;Configuration=Release;Platform=x64" />
-    <MSBuild
       Projects="$(MSBuildThisFileDirectory)NanaZip.ExtensionPackage\NanaZip.Extension.vcxproj"
       Targets="Build"
       BuildInParallel="True"
