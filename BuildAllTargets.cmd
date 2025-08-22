@@ -4,9 +4,6 @@
 rem Change to the current folder.
 cd "%~dp0"
 
-rem Remove the output folder for a fresh compile.
-rd /s /q Output
-
 rem Initialize Visual Studio environment
 set VisualStudioInstallerFolder="%ProgramFiles(x86)%\Microsoft Visual Studio\Installer"
 if %PROCESSOR_ARCHITECTURE%==x86 set VisualStudioInstallerFolder="%ProgramFiles%\Microsoft Visual Studio\Installer"
