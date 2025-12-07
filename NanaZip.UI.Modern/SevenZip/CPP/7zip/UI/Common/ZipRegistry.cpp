@@ -1,4 +1,4 @@
-﻿// ZipRegistry.cpp
+// ZipRegistry.cpp
 
 #include "StdAfx.h"
 
@@ -11,8 +11,11 @@
 #include "../../../Windows/Registry.h"
 #include "../../../Windows/Synchronization.h"
 
+// **************** 7-Zip ZS Modification Start ****************
 #include "../FileManager/RegistryUtils.h"
+// **************** 7-Zip ZS Modification End ****************
 
+// #include "../Explorer/ContextMenuFlags.h"
 #include "ZipRegistry.h"
 
 using namespace NWindows;
@@ -21,7 +24,10 @@ using namespace NRegistry;
 static NSynchronization::CCriticalSection g_CS;
 #define CS_LOCK NSynchronization::CCriticalSectionLock lock(g_CS);
 
+// **************** NanaZip Modification Start ****************
+// static LPCTSTR const kCuPrefix = TEXT("Software") TEXT(STRING_PATH_SEPARATOR) TEXT("7-Zip") TEXT(STRING_PATH_SEPARATOR);
 static LPCTSTR const kCuPrefix = TEXT("Software") TEXT(STRING_PATH_SEPARATOR) TEXT("NanaZip") TEXT(STRING_PATH_SEPARATOR);
+// **************** NanaZip Modification End ****************
 
 static CSysString GetKeyPath(LPCTSTR path) { return kCuPrefix + (CSysString)path; }
 
@@ -53,8 +59,8 @@ static void Key_Set_UInt32(CKey &key, LPCTSTR name, UInt32 value)
 
 static void Key_Get_UInt32(CKey &key, LPCTSTR name, UInt32 &value)
 {
-  if (key.QueryValue(name, value) != ERROR_SUCCESS)
-    value = (UInt32)(Int32)-1;
+  value = (UInt32)(Int32)-1;
+  key.GetValue_UInt32_IfOk(name, value);
 }
 
 
@@ -67,7 +73,7 @@ static void Key_Set_BoolPair(CKey &key, LPCTSTR name, const CBoolPair &b)
 static void Key_Set_bool_if_Changed(CKey &key, LPCTSTR name, bool val)
 {
   bool oldVal = false;
-  if (key.GetValue_IfOk(name, oldVal) == ERROR_SUCCESS)
+  if (key.GetValue_bool_IfOk(name, oldVal) == ERROR_SUCCESS)
     if (val == oldVal)
       return;
   key.SetValue(name, val);
@@ -84,13 +90,13 @@ static void Key_Set_BoolPair_Delete_IfNotDef(CKey &key, LPCTSTR name, const CBoo
 static void Key_Get_BoolPair(CKey &key, LPCTSTR name, CBoolPair &b)
 {
   b.Val = false;
-  b.Def = (key.GetValue_IfOk(name, b.Val) == ERROR_SUCCESS);
+  b.Def = (key.GetValue_bool_IfOk(name, b.Val) == ERROR_SUCCESS);
 }
 
 static void Key_Get_BoolPair_true(CKey &key, LPCTSTR name, CBoolPair &b)
 {
   b.Val = true;
-  b.Def = (key.GetValue_IfOk(name, b.Val) == ERROR_SUCCESS);
+  b.Def = (key.GetValue_bool_IfOk(name, b.Val) == ERROR_SUCCESS);
 }
 
 namespace NExtract
@@ -106,6 +112,7 @@ static LPCTSTR const kSplitDest = TEXT("SplitDest");
 static LPCTSTR const kElimDup = TEXT("ElimDup");
 // static LPCTSTR const kAltStreams = TEXT("AltStreams");
 static LPCTSTR const kNtSecur = TEXT("Security");
+static LPCTSTR const kMemLimit = TEXT("MemLimit");
 // **************** NanaZip Modification Start ****************
 static LPCTSTR const kOpenFolderAfterExtract = TEXT("OpenFolderAfterExtract");
 // **************** NanaZip Modification End ****************
@@ -115,7 +122,9 @@ void CInfo::Save() const
   CS_LOCK
   CKey key;
   CreateMainKey(key, kKeyName);
+  // **************** 7-Zip ZS Modification Start ****************
   UStringVector Empty;
+  // **************** 7-Zip ZS Modification End ****************
 
   if (PathMode_Force)
     key.SetValue(kExtractMode, (UInt32)PathMode);
@@ -132,10 +141,12 @@ void CInfo::Save() const
   // **************** NanaZip Modification End ****************
 
   key.RecurseDeleteKey(kPathHistory);
+  // **************** 7-Zip ZS Modification Start ****************
   if (WantPathHistory())
     key.SetValue_Strings(kPathHistory, Paths);
   else
     key.SetValue_Strings(kPathHistory, Empty);
+  // **************** 7-Zip ZS Modification End ****************
 }
 
 void Save_ShowPassword(bool showPassword)
@@ -144,6 +155,14 @@ void Save_ShowPassword(bool showPassword)
   CKey key;
   CreateMainKey(key, kKeyName);
   key.SetValue(kShowPassword, showPassword);
+}
+
+void Save_LimitGB(UInt32 limit_GB)
+{
+  CS_LOCK
+  CKey key;
+  CreateMainKey(key, kKeyName);
+  Key_Set_UInt32(key, kMemLimit, limit_GB);
 }
 
 void CInfo::Load()
@@ -164,12 +183,12 @@ void CInfo::Load()
 
   key.GetValue_Strings(kPathHistory, Paths);
   UInt32 v;
-  if (key.QueryValue(kExtractMode, v) == ERROR_SUCCESS && v <= NPathMode::kAbsPaths)
+  if (key.GetValue_UInt32_IfOk(kExtractMode, v) == ERROR_SUCCESS && v <= NPathMode::kAbsPaths)
   {
     PathMode = (NPathMode::EEnum)v;
     PathMode_Force = true;
   }
-  if (key.QueryValue(kOverwriteMode, v) == ERROR_SUCCESS && v <= NOverwriteMode::kRenameExisting)
+  if (key.GetValue_UInt32_IfOk(kOverwriteMode, v) == ERROR_SUCCESS && v <= NOverwriteMode::kRenameExisting)
   {
     OverwriteMode = (NOverwriteMode::EEnum)v;
     OverwriteMode_Force = true;
@@ -193,8 +212,18 @@ bool Read_ShowPassword()
   bool showPassword = false;
   if (OpenMainKey(key, kKeyName) != ERROR_SUCCESS)
     return showPassword;
-  key.GetValue_IfOk(kShowPassword, showPassword);
+  key.GetValue_bool_IfOk(kShowPassword, showPassword);
   return showPassword;
+}
+
+UInt32 Read_LimitGB()
+{
+  CS_LOCK
+  CKey key;
+  UInt32 v = (UInt32)(Int32)-1;
+  if (OpenMainKey(key, kKeyName) == ERROR_SUCCESS)
+    key.GetValue_UInt32_IfOk(kMemLimit, v);
+  return v;
 }
 
 }
@@ -213,12 +242,12 @@ static LPCTSTR const kOptionsKeyName = TEXT("Options");
 
 static LPCTSTR const kLevel = TEXT("Level");
 static LPCTSTR const kDictionary = TEXT("Dictionary");
+// static LPCTSTR const kDictionaryChain = TEXT("DictionaryChain");
 static LPCTSTR const kOrder = TEXT("Order");
 static LPCTSTR const kBlockSize = TEXT("BlockSize");
 static LPCTSTR const kNumThreads = TEXT("NumThreads");
 static LPCWSTR const kMethod = L"Method";
 static LPCWSTR const kOptions = L"Options";
-static LPCWSTR const kSplitVolume = L"SplitVolume";
 static LPCWSTR const kEncryptionMethod = L"EncryptionMethod";
 
 static LPCTSTR const kNtSecur = TEXT("Security");
@@ -256,7 +285,9 @@ static LPCWSTR const kMemUse = L"MemUse"
 
 void CInfo::Save() const
 {
+  // **************** 7-Zip ZS Modification Start ****************
   UStringVector Empty;
+  // **************** 7-Zip ZS Modification End ****************
   CS_LOCK
 
   CKey key;
@@ -275,32 +306,63 @@ void CInfo::Save() const
   key.SetValue(kEncryptHeaders, EncryptHeaders);
   key.RecurseDeleteKey(kArcHistory);
 
+  // **************** 7-Zip ZS Modification Start ****************
   if (WantArcHistory())
     key.SetValue_Strings(kArcHistory, ArcPaths);
   else
     key.SetValue_Strings(kArcHistory, Empty);
+  // **************** 7-Zip ZS Modification End ****************
 
-  key.RecurseDeleteKey(kOptionsKeyName);
+  // **************** 7-Zip ZS Modification Start ****************
+  // key.RecurseDeleteKey(kOptionsKeyName);
+  // **************** 7-Zip ZS Modification End ****************
   {
     CKey optionsKey;
     optionsKey.Create(key, kOptionsKeyName);
     FOR_VECTOR (i, Formats)
     {
       const CFormatOptions &fo = Formats[i];
-      CKey fk;
+      // **************** 7-Zip ZS Modification Start ****************
+      // CKey fk;
+      CKey fk, fkm;
+      // **************** 7-Zip ZS Modification End ****************
       fk.Create(optionsKey, fo.FormatID);
+      // **************** 7-Zip ZS Modification Start ****************
+      fkm.Create(fk, fo.Method);
+      // **************** 7-Zip ZS Modification End ****************
 
       SetRegString(fk, kMethod, fo.Method);
       SetRegString(fk, kOptions, fo.Options);
-      SetRegString(fk, kSplitVolume, fo.SplitVolume);
+      // **************** 7-Zip ZS Modification Start ****************
+      SetRegString(fkm, kOptions, fo.Options);
+      // **************** 7-Zip ZS Modification End ****************
       SetRegString(fk, kEncryptionMethod, fo.EncryptionMethod);
       SetRegString(fk, kMemUse, fo.MemUse);
+      // **************** 7-Zip ZS Modification Start ****************
+      SetRegString(fkm, kMemUse, fo.MemUse);
+      // **************** 7-Zip ZS Modification End ****************
 
       Key_Set_UInt32(fk, kLevel, fo.Level);
+      // **************** 7-Zip ZS Modification Start ****************
+      Key_Set_UInt32(fkm, kLevel, fo.Level);
+      // **************** 7-Zip ZS Modification End ****************
       Key_Set_UInt32(fk, kDictionary, fo.Dictionary);
+      // **************** 7-Zip ZS Modification Start ****************
+      Key_Set_UInt32(fkm, kDictionary, fo.Dictionary);
+      // **************** 7-Zip ZS Modification End ****************
+      // Key_Set_UInt32(fk, kDictionaryChain, fo.DictionaryChain);
       Key_Set_UInt32(fk, kOrder, fo.Order);
+      // **************** 7-Zip ZS Modification Start ****************
+      Key_Set_UInt32(fkm, kOrder, fo.Order);
+      // **************** 7-Zip ZS Modification End ****************
       Key_Set_UInt32(fk, kBlockSize, fo.BlockLogSize);
+      // **************** 7-Zip ZS Modification Start ****************
+      Key_Set_UInt32(fkm, kBlockSize, fo.BlockLogSize);
+      // **************** 7-Zip ZS Modification End ****************
       Key_Set_UInt32(fk, kNumThreads, fo.NumThreads);
+      // **************** 7-Zip ZS Modification Start ****************
+      Key_Set_UInt32(fkm, kNumThreads, fo.NumThreads);
+      // **************** 7-Zip ZS Modification End ****************
 
       Key_Set_UInt32(fk, kTimePrec, fo.TimePrec);
       Key_Set_BoolPair_Delete_IfNotDef (fk, kMTime, fo.MTime);
@@ -350,12 +412,12 @@ void CInfo::Load()
         {
           GetRegString(fk, kMethod, fo.Method);
           GetRegString(fk, kOptions, fo.Options);
-          GetRegString(fk, kSplitVolume, fo.SplitVolume);
           GetRegString(fk, kEncryptionMethod, fo.EncryptionMethod);
           GetRegString(fk, kMemUse, fo.MemUse);
 
           Key_Get_UInt32(fk, kLevel, fo.Level);
           Key_Get_UInt32(fk, kDictionary, fo.Dictionary);
+          // Key_Get_UInt32(fk, kDictionaryChain, fo.DictionaryChain);
           Key_Get_UInt32(fk, kOrder, fo.Order);
           Key_Get_UInt32(fk, kBlockSize, fo.BlockLogSize);
           Key_Get_UInt32(fk, kNumThreads, fo.NumThreads);
@@ -375,10 +437,34 @@ void CInfo::Load()
   UString a;
   if (key.QueryValue(kArchiver, a) == ERROR_SUCCESS)
     ArcType = a;
-  key.GetValue_IfOk(kLevel, Level);
-  key.GetValue_IfOk(kShowPassword, ShowPassword);
-  key.GetValue_IfOk(kEncryptHeaders, EncryptHeaders);
+  key.GetValue_UInt32_IfOk(kLevel, Level);
+  key.GetValue_bool_IfOk(kShowPassword, ShowPassword);
+  key.GetValue_bool_IfOk(kEncryptHeaders, EncryptHeaders);
 }
+
+// **************** 7-Zip ZS Modification Start ****************
+void CInfo::LoadAndUpdateFormatByMethod(CFormatOptions &fo)
+{
+  CS_LOCK
+  CKey key, optionsKey, fk, fkm;
+
+  if ( OpenMainKey(key, kKeyName) != ERROR_SUCCESS
+    || optionsKey.Open(key, kOptionsKeyName, KEY_READ) != ERROR_SUCCESS
+    || fk.Open(optionsKey, fo.FormatID, KEY_READ) != ERROR_SUCCESS
+    || fkm.Open(fk, fo.Method, KEY_READ) != ERROR_SUCCESS
+  ) {
+    return;
+  };
+
+  GetRegString(fkm, kOptions, fo.Options);
+  GetRegString(fkm, kMemUse, fo.MemUse);
+  Key_Get_UInt32(fkm, kLevel, fo.Level);
+  Key_Get_UInt32(fkm, kDictionary, fo.Dictionary);
+  Key_Get_UInt32(fkm, kOrder, fo.Order);
+  Key_Get_UInt32(fkm, kBlockSize, fo.BlockLogSize);
+  Key_Get_UInt32(fkm, kNumThreads, fo.NumThreads);
+}
+// **************** 7-Zip ZS Modification End ****************
 
 
 static bool ParseMemUse(const wchar_t *s, CMemUse &mu)
@@ -524,7 +610,7 @@ void CInfo::Load()
     return;
 
   UInt32 dirType;
-  if (key.QueryValue(kWorkDirType, dirType) != ERROR_SUCCESS)
+  if (key.GetValue_UInt32_IfOk(kWorkDirType, dirType) != ERROR_SUCCESS)
     return;
   switch (dirType)
   {
@@ -542,7 +628,7 @@ void CInfo::Load()
     if (Mode == NMode::kSpecified)
       Mode = NMode::kSystem;
   }
-  key.GetValue_IfOk(kTempRemovableOnly, ForRemovableOnly);
+  key.GetValue_bool_IfOk(kTempRemovableOnly, ForRemovableOnly);
 }
 
 }
@@ -594,7 +680,15 @@ void CContextMenuInfo::Load()
   ExtractOnOpen.Def = false;
   // **************** NanaZip Modification End ****************
 
-  Flags = (UInt32)(Int32)-1;
+  /* we can disable email items by default,
+     because email code doesn't work in some systems */
+  Flags = (UInt32)(Int32)-1
+      /*
+      & ~NContextMenuFlags::kCompressEmail
+      & ~NContextMenuFlags::kCompressTo7zEmail
+      & ~NContextMenuFlags::kCompressToZipEmail
+      */
+      ;
   Flags_Def = false;
 
   CS_LOCK
@@ -617,11 +711,11 @@ void CContextMenuInfo::Load()
   // **************** NanaZip Modification Start ****************
   if (WriteZone == (UInt32)(Int32)-1)
   {
-    Key_Get_UInt32(key, kWriteZoneId, WriteZone);
+  Key_Get_UInt32(key, kWriteZoneId, WriteZone);
   }
 
   Key_Get_BoolPair(key, kExtractOnOpen, ExtractOnOpen);
   // **************** NanaZip Modification End ****************
 
-  Flags_Def = (key.GetValue_IfOk(kContextMenu, Flags) == ERROR_SUCCESS);
+  Flags_Def = (key.GetValue_UInt32_IfOk(kContextMenu, Flags) == ERROR_SUCCESS);
 }

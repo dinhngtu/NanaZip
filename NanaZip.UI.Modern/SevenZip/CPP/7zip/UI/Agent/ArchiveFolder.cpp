@@ -1,4 +1,4 @@
-﻿// Agent/ArchiveFolder.cpp
+// Agent/ArchiveFolder.cpp
 
 #include "StdAfx.h"
 
@@ -9,31 +9,29 @@
 #include "Agent.h"
 
 /*
-STDMETHODIMP CAgentFolder::SetReplaceAltStreamCharsMode(Int32 replaceAltStreamCharsMode)
+Z7_COM7F_IMF(CAgentFolder::SetReplaceAltStreamCharsMode(Int32 replaceAltStreamCharsMode))
 {
   _replaceAltStreamCharsMode = replaceAltStreamCharsMode;
   return S_OK;
 }
 */
 
-STDMETHODIMP CAgentFolder::SetZoneIdMode(NExtract::NZoneIdMode::EEnum zoneMode)
+Z7_COM7F_IMF(CAgentFolder::SetZoneIdMode(NExtract::NZoneIdMode::EEnum zoneMode))
 {
   _zoneMode = zoneMode;
   return S_OK;
 }
 
-// **************** NanaZip Modification Start ****************
-// Backported from 24.09, function prototype adapted to NanaZip.
-STDMETHODIMP CAgentFolder::SetZoneIdFile(const Byte *data, UInt32 size)
+Z7_COM7F_IMF(CAgentFolder::SetZoneIdFile(const Byte *data, UInt32 size))
 {
   _zoneBuf.CopyFrom(data, size);
   return S_OK;
 }
-// **************** NanaZip Modification End ****************
 
-STDMETHODIMP CAgentFolder::CopyTo(Int32 moveMode, const UInt32 *indices, UInt32 numItems,
+
+Z7_COM7F_IMF(CAgentFolder::CopyTo(Int32 moveMode, const UInt32 *indices, UInt32 numItems,
     Int32 includeAltStreams, Int32 replaceAltStreamCharsMode,
-    const wchar_t *path, IFolderOperationsExtractCallback *callback)
+    const wchar_t *path, IFolderOperationsExtractCallback *callback))
 {
   if (moveMode)
     return E_NOTIMPL;
@@ -41,7 +39,7 @@ STDMETHODIMP CAgentFolder::CopyTo(Int32 moveMode, const UInt32 *indices, UInt32 
   CMyComPtr<IFolderArchiveExtractCallback> extractCallback2;
   {
     CMyComPtr<IFolderOperationsExtractCallback> callbackWrap = callback;
-    RINOK(callbackWrap.QueryInterface(IID_IFolderArchiveExtractCallback, &extractCallback2));
+    RINOK(callbackWrap.QueryInterface(IID_IFolderArchiveExtractCallback, &extractCallback2))
   }
   NExtract::NPathMode::EEnum pathMode;
   if (!_flatMode)

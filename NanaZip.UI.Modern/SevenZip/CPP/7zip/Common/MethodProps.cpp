@@ -2,6 +2,9 @@
 
 #include "StdAfx.h"
 
+// **************** 7-Zip ZS Modification Start ****************
+#include "../../Windows/System.h"
+// **************** 7-Zip ZS Modification End ****************
 #include "../../Common/StringToInt.h"
 
 #include "MethodProps.h"
@@ -60,6 +63,7 @@ HRESULT PROPVARIANT_to_bool(const PROPVARIANT &prop, bool &dest)
     case VT_EMPTY: dest = true; return S_OK;
     case VT_BOOL: dest = (prop.boolVal != VARIANT_FALSE); return S_OK;
     case VT_BSTR: return StringToBool(prop.bstrVal, dest) ? S_OK : E_INVALIDARG;
+    default: break;
   }
   return E_INVALIDARG;
 }
@@ -106,6 +110,8 @@ HRESULT ParsePropToUInt32(const UString &name, const PROPVARIANT &prop, UInt32 &
 
 
 
+// **************** 7-Zip ZS Modification Start ****************
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
 HRESULT ParseMtProp2(const UString &name, const PROPVARIANT &prop, UInt32 &numThreads, bool &force)
 {
   force = false;
@@ -187,6 +193,115 @@ HRESULT ParseMtProp2(const UString &name, const PROPVARIANT &prop, UInt32 &numTh
   force = force_loc;
   return S_OK;
 }
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+HRESULT ParseMtProp(const UString &name, const PROPVARIANT &prop, UInt32 numCPUs, UInt32 &numThreads)
+{
+  UString s;
+  numThreads = numCPUs < INT_MAX ? numCPUs : NWindows::NSystem::GetNumberOfProcessors();
+  if (name.IsEmpty())
+  {
+    if (prop.vt == VT_UI4)
+    {
+      numThreads = prop.ulVal;
+      if (numThreads > numCPUs) numThreads = numCPUs;
+      return S_OK;
+    }
+    bool val;
+    HRESULT res = PROPVARIANT_to_bool(prop, val);
+    if (res == S_OK)
+    {
+      // -mmt=off, -mmt-
+      if (!val) {
+        numThreads = 0; /* 0 - single threaded, to differentiate from 1 by encoder like brotli-mt with single CPU */
+      }
+      return S_OK;
+    }
+    if (prop.vt != VT_BSTR)
+      return res;
+    s.SetFromBstr(prop.bstrVal);
+    if (s.IsEmpty())
+      return E_INVALIDARG;
+  }
+  else
+  {
+    if (prop.vt != VT_EMPTY)
+      return E_INVALIDARG;
+    s = name;
+  }
+
+  s.MakeLower_Ascii();
+  const wchar_t *start = s;
+  if (*start == '=') start++;
+  if (*start == 'o') {
+    if (wcscmp(start, L"on") == 0) {
+      numThreads = numCPUs; // force on
+      return S_OK;
+    } else if (wcscmp(start, L"off") == 0) {
+      numThreads = 0; // force off
+      return S_OK;
+    }
+  }
+  /* we force up, if threads number specified
+     only `d` will force it down */
+  int numTh = (int)numThreads;
+  while (*start)
+  {
+    int forceUD = 0;
+    bool isPercent = false;
+    switch (*start) {
+      case '-':
+        if (!*(start+1)) {
+          numThreads = 0; // force off
+          return S_OK;
+        }
+        // otherwise force down
+      case 'd':
+        forceUD = -1;  // force down
+        start++;
+        if (*start == 'p') goto percent;
+        break;
+      case '+':
+        if (!*(start+1)) {
+          numThreads = numCPUs; // force on
+          return S_OK;
+        }
+        // otherwise force up
+      case 'u':
+        forceUD = +1;   // force up
+        start++;
+        if (*start == 'p') goto percent;
+        break;
+      case 'p':
+      percent:
+        isPercent = true;
+        start++;
+        break;
+    }
+    const wchar_t *end;
+    UInt32 v;
+    v = ConvertStringToUInt32(start, &end);
+    if (end == start) {
+      if (!forceUD) {
+        return E_INVALIDARG;
+      }
+      v = 1; // d or u not followed by number (simply -1 or +1)
+    }
+    if (isPercent) {
+      v = numThreads * v / 100;
+    }
+    if (forceUD) {
+      numTh += forceUD * v;
+    } else {
+      numTh = v;
+    }
+    start = end;
+  }
+  if (numTh <= 0) numTh = 1;
+  if (numTh > (int)numCPUs) numTh = (int)numCPUs;
+  numThreads = numTh;
+  return S_OK;
+}
+// **************** 7-Zip ZS Modification End ****************
 
 
 
@@ -323,15 +438,22 @@ void CCoderProps::AddProp(const CProp &prop)
 
 HRESULT CProps::SetCoderProps(ICompressSetCoderProperties *scp, const UInt64 *dataSizeReduce) const
 {
-  return SetCoderProps_DSReduce_Aff(scp, dataSizeReduce, NULL);
+  return SetCoderProps_DSReduce_Aff(scp, dataSizeReduce, NULL, NULL, NULL);
 }
 
 HRESULT CProps::SetCoderProps_DSReduce_Aff(
     ICompressSetCoderProperties *scp,
     const UInt64 *dataSizeReduce,
-    const UInt64 *affinity) const
+    const UInt64 *affinity,
+    const UInt32 *affinityGroup,
+    const UInt64 *affinityInGroup) const
 {
-  CCoderProps coderProps(Props.Size() + (dataSizeReduce ? 1 : 0) + (affinity ? 1 : 0) );
+  CCoderProps coderProps(Props.Size()
+      + (dataSizeReduce ? 1 : 0)
+      + (affinity ? 1 : 0)
+      + (affinityGroup ? 1 : 0)
+      + (affinityInGroup ? 1 : 0)
+      );
   FOR_VECTOR (i, Props)
     coderProps.AddProp(Props[i]);
   if (dataSizeReduce)
@@ -346,6 +468,20 @@ HRESULT CProps::SetCoderProps_DSReduce_Aff(
     CProp prop;
     prop.Id = NCoderPropID::kAffinity;
     prop.Value = *affinity;
+    coderProps.AddProp(prop);
+  }
+  if (affinityGroup)
+  {
+    CProp prop;
+    prop.Id = NCoderPropID::kThreadGroup;
+    prop.Value = *affinityGroup;
+    coderProps.AddProp(prop);
+  }
+  if (affinityInGroup)
+  {
+    CProp prop;
+    prop.Id = NCoderPropID::kAffinityInGroup;
+    prop.Value = *affinityInGroup;
     coderProps.AddProp(prop);
   }
   return coderProps.SetProps(scp);
@@ -368,7 +504,10 @@ unsigned CMethodProps::GetLevel() const
   if (Props[(unsigned)i].Value.vt != VT_UI4)
     return 9;
   UInt32 level = Props[(unsigned)i].Value.ulVal;
-  return level > 9 ? 9 : (unsigned)level;
+  // **************** 7-Zip ZS Modification Start ****************
+  // return level > 9 ? 9 : (unsigned)level;
+  return level;
+  // **************** 7-Zip ZS Modification End ****************
 }
 
 struct CNameToPropID
@@ -379,14 +518,14 @@ struct CNameToPropID
 
 
 // the following are related to NCoderPropID::EEnum values
-
+// NCoderPropID::k_NUM_DEFINED
 static const CNameToPropID g_NameToPropID[] =
 {
   { VT_UI4, "" },
   { VT_UI4, "d" },
   { VT_UI4, "mem" },
   { VT_UI4, "o" },
-  { VT_UI4, "c" },
+  { VT_UI8, "c" },
   { VT_UI4, "pb" },
   { VT_UI4, "lc" },
   { VT_UI4, "lp" },
@@ -400,11 +539,44 @@ static const CNameToPropID g_NameToPropID[] =
   { VT_UI4, "x" },
   { VT_UI8, "reduce" },
   { VT_UI8, "expect" },
-  { VT_UI4, "b" },
+  { VT_UI8, "cc" }, // "cc" in v23,  "b" in v22.01
   { VT_UI4, "check" },
   { VT_BSTR, "filter" },
   { VT_UI8, "memuse" },
   { VT_UI8, "aff" },
+  { VT_UI4, "offset" },
+  { VT_UI4, "zhb" },
+  { VT_UI4, "tgn" }, // kNumThreadGroups
+  { VT_UI4, "tgi" }, // kThreadGroup
+  { VT_UI8, "tga" }, // kAffinityInGroup
+  /*
+  ,
+  // { VT_UI4, "zhc" },
+  // { VT_UI4, "zhd" },
+  // { VT_UI4, "zcb" },
+  { VT_UI4, "dc" },
+  { VT_UI4, "zx" },
+  { VT_UI4, "zf" },
+  { VT_UI4, "zmml" },
+  { VT_UI4, "zov" },
+  { VT_BOOL, "zmfr" },
+  { VT_BOOL, "zle" }, // long enable
+  // { VT_UI4, "zldb" },
+  { VT_UI4, "zld" },
+  { VT_UI4, "zlhb" },
+  { VT_UI4, "zlmml" },
+  { VT_UI4, "zlbb" },
+  { VT_UI4, "zlhrb" },
+  { VT_BOOL, "zwus" },
+  { VT_BOOL, "zshp" },
+  { VT_BOOL, "zshs" },
+  { VT_BOOL, "zshe" },
+  { VT_BOOL, "zshg" },
+  { VT_UI4, "zpsm" }
+  */
+  // { VT_UI4, "mcb" }, // mc log version
+  // { VT_UI4, "ztlen" },  // fb ?
+  // **************** 7-Zip ZS Modification Start ****************
   // zstd props
   { VT_UI4, "strat" },
   { VT_UI4, "fast" },
@@ -419,22 +591,39 @@ static const CNameToPropID g_NameToPropID[] =
   { VT_UI4, "ldmhlog" },
   { VT_UI4, "ldmslen" },
   { VT_UI4, "ldmblog" },
-  { VT_UI4, "ldmhevery" }
+  { VT_UI4, "ldmhevery" },
+  { VT_BOOL, "max" }
+  // **************** 7-Zip ZS Modification End ****************
 };
 
-#if defined(static_assert) || (__STDC_VERSION >= 201112L) || (_MSC_VER >= 1900)
-  static_assert(ARRAY_SIZE(g_NameToPropID) == NCoderPropID::kEndOfProp,
+/*
+#if defined(static_assert) || (defined(__cplusplus) && __cplusplus >= 200410L) || (defined(_MSC_VER) && _MSC_VER >= 1600)
+
+#if (defined(__cplusplus) && __cplusplus < 201103L) \
+    && defined(__clang__) && __clang_major__ >= 4
+#pragma GCC diagnostic ignored "-Wc11-extensions"
+#endif
+  static_assert(Z7_ARRAY_SIZE(g_NameToPropID) == NCoderPropID::k_NUM_DEFINED,
     "g_NameToPropID doesn't match NCoderPropID enum");
 #endif
+*/
+// **************** 7-Zip ZS Modification Start ****************
+#if defined(static_assert) || (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || (_MSC_VER >= 1900)
+static_assert(Z7_ARRAY_SIZE(g_NameToPropID) == NCoderPropID::k_NUM_DEFINED,
+    "g_NameToPropID doesn't match NCoderPropID enum");
+#endif
+// **************** 7-Zip ZS Modification End ****************
 
 static int FindPropIdExact(const UString &name)
 {
-  for (unsigned i = 0; i < ARRAY_SIZE(g_NameToPropID); i++)
+  for (unsigned i = 0; i < Z7_ARRAY_SIZE(g_NameToPropID); i++)
     if (StringsAreEqualNoCase_Ascii(name, g_NameToPropID[i].Name))
       return (int)i;
   return -1;
 }
 
+// **************** 7-Zip ZS Modification Start ****************
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
 static bool ConvertProperty(const PROPVARIANT &srcProp, VARTYPE varType, NCOM::CPropVariant &destProp)
 {
   if (varType == srcProp.vt)
@@ -464,7 +653,50 @@ static bool ConvertProperty(const PROPVARIANT &srcProp, VARTYPE varType, NCOM::C
   }
   return false;
 }
-    
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+static bool ConvertProperty(const UString &name, const PROPVARIANT &srcProp, VARTYPE varType, CProp &destProp)
+{
+  if (varType != srcProp.vt) {
+    // try to convert property from other source type:
+    switch (destProp.Id) {
+      case NCoderPropID::kNumThreads: // on, off or {N}
+        UInt32 val;
+        if (ParseMtProp(name.Ptr(2), srcProp, INT_MAX, val) != S_OK)
+          return false;
+        destProp.Value.ulVal = val;
+        return true;
+      break;
+    }
+  }
+  if (varType == srcProp.vt)
+  {
+    destProp.Value = srcProp;
+    return true;
+  }
+
+  if (varType == VT_UI8 && srcProp.vt == VT_UI4)
+  {
+    destProp.Value = (UInt64)srcProp.ulVal;
+    return true;
+  }
+
+  if (varType == VT_BOOL)
+  {
+    bool res;
+    if (PROPVARIANT_to_bool(srcProp, res) != S_OK)
+      return false;
+    destProp.Value = res;
+    return true;
+  }
+  if (srcProp.vt == VT_EMPTY)
+  {
+    destProp.Value = srcProp;
+    return true;
+  }
+  return false;
+}
+// **************** 7-Zip ZS Modification End ****************
+
 static void SplitParams(const UString &srcString, UStringVector &subStrings)
 {
   subStrings.Clear();
@@ -514,8 +746,13 @@ static bool IsLogSizeProp(PROPID propid)
     case NCoderPropID::kUsedMemorySize:
     case NCoderPropID::kBlockSize:
     case NCoderPropID::kBlockSize2:
+    /*
+    case NCoderPropID::kChainSize:
+    case NCoderPropID::kLdmWindowSize:
+    */
     // case NCoderPropID::kReduceSize:
       return true;
+    default: break;
   }
   return false;
 }
@@ -524,14 +761,19 @@ HRESULT CMethodProps::SetParam(const UString &name, const UString &value)
 {
   int index = FindPropIdExact(name);
   if (index < 0)
-    return E_INVALIDARG;
+  {
+    // 'b' was used as NCoderPropID::kBlockSize2 before v23
+    if (!name.IsEqualTo_Ascii_NoCase("b") || value.Find(L':') >= 0)
+      return E_INVALIDARG;
+    index = NCoderPropID::kBlockSize2;
+  }
   const CNameToPropID &nameToPropID = g_NameToPropID[(unsigned)index];
   CProp prop;
   prop.Id = (unsigned)index;
 
   if (IsLogSizeProp(prop.Id))
   {
-    RINOK(StringToDictSize(value, prop.Value));
+    RINOK(StringToDictSize(value, prop.Value))
   }
   else
   {
@@ -566,12 +808,32 @@ HRESULT CMethodProps::SetParam(const UString &name, const UString &value)
       else
         propValue = value;
     }
-    if (!ConvertProperty(propValue, nameToPropID.VarType, prop.Value))
+    // **************** 7-Zip ZS Modification Start ****************
+    // if (!ConvertProperty(propValue, nameToPropID.VarType, prop.Value))
+    if (!ConvertProperty(name, propValue, nameToPropID.VarType, prop))
+    // **************** 7-Zip ZS Modification End ****************
       return E_INVALIDARG;
+    // **************** 7-Zip ZS Modification Start ****************
+    if (prop.Id == NCoderPropID::kAdvMax && prop.Value.boolVal) {
+      setMaxCompression();
+    }
+    // **************** 7-Zip ZS Modification End ****************
   }
   Props.Add(prop);
   return S_OK;
 }
+
+// **************** 7-Zip ZS Modification Start ****************
+void CMethodProps::setMaxCompression()
+{
+  // adjust level (zstd --max), set it to the highest level too (e. g. setting of options.MaxFilter for BCJ2 etc)
+  CProp prop;
+  prop.Id = (unsigned)NCoderPropID::kLevel;
+  prop.Value.vt = VT_UI4;
+  prop.Value.ulVal = Z7_ZSTD_ULTIMATE_LEV;
+  Props.Add(prop);
+}
+// **************** 7-Zip ZS Modification End ****************
 
 HRESULT CMethodProps::ParseParamsFromString(const UString &srcString)
 {
@@ -581,8 +843,18 @@ HRESULT CMethodProps::ParseParamsFromString(const UString &srcString)
   {
     const UString &param = params[i];
     UString name, value;
+    // **************** 7-Zip ZS Modification Start ****************
+    if (param.IsPrefixedBy_Ascii_NoCase("mt")) { // special handler for mt (to parse correct -mmt-, -mmtd2, -mmtp50u2, etc)
+      UInt32 val;
+      CProp prop;
+      prop.Value.vt = VT_EMPTY;
+      RINOK(ParseMtProp(param.Ptr(2), prop.Value, INT_MAX, val))
+      AddProp32(NCoderPropID::kNumThreads, val);
+      continue;
+    }
+    // **************** 7-Zip ZS Modification End ****************
     SplitParam(param, name, value);
-    RINOK(SetParam(name, value));
+    RINOK(SetParam(name, value))
   }
   return S_OK;
 }
@@ -594,6 +866,14 @@ HRESULT CMethodProps::ParseParamsFromPROPVARIANT(const UString &realName, const 
     // [empty]=method
     return E_INVALIDARG;
   }
+  // **************** 7-Zip ZS Modification Start ****************
+  if (realName.IsPrefixedBy_Ascii_NoCase("mt")) { // special handler for mt (to parse correct -mmt-, -mmtd2, -mmtp50u2, etc)
+    UInt32 val;
+    RINOK(ParseMtProp(realName.Ptr(2), value, INT_MAX, val))
+    AddProp32(NCoderPropID::kNumThreads, val);
+    return S_OK;
+  }
+  // **************** 7-Zip ZS Modification End ****************
   if (value.vt == VT_EMPTY)
   {
     // {realName}=[empty]
@@ -603,7 +883,7 @@ HRESULT CMethodProps::ParseParamsFromPROPVARIANT(const UString &realName, const 
   }
   
   // {realName}=value
-  int index = FindPropIdExact(realName);
+  const int index = FindPropIdExact(realName);
   if (index < 0)
     return E_INVALIDARG;
   const CNameToPropID &nameToPropID = g_NameToPropID[(unsigned)index];
@@ -612,12 +892,20 @@ HRESULT CMethodProps::ParseParamsFromPROPVARIANT(const UString &realName, const 
   
   if (IsLogSizeProp(prop.Id))
   {
-    RINOK(PROPVARIANT_to_DictSize(value, prop.Value));
+    RINOK(PROPVARIANT_to_DictSize(value, prop.Value))
   }
   else
   {
-    if (!ConvertProperty(value, nameToPropID.VarType, prop.Value))
+    // **************** 7-Zip ZS Modification Start ****************
+    // if (!ConvertProperty(value, nameToPropID.VarType, prop.Value))
+    if (!ConvertProperty(realName, value, nameToPropID.VarType, prop))
+    // **************** 7-Zip ZS Modification End ****************
       return E_INVALIDARG;
+    // **************** 7-Zip ZS Modification Start ****************
+    if (prop.Id == NCoderPropID::kAdvMax && prop.Value.boolVal) {
+      setMaxCompression();
+  }
+    // **************** 7-Zip ZS Modification End ****************
   }
   Props.Add(prop);
   return S_OK;
@@ -696,8 +984,20 @@ HRESULT COneMethodInfo::ParseMethodFromString(const UString &s)
 
 HRESULT COneMethodInfo::ParseMethodFromPROPVARIANT(const UString &realName, const PROPVARIANT &value)
 {
+  // **************** 7-Zip ZS Modification Start ****************
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   if (!realName.IsEmpty() && !StringsAreEqualNoCase_Ascii(realName, "m"))
     return ParseParamsFromPROPVARIANT(realName, value);
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+  if (!realName.IsEmpty() && !StringsAreEqualNoCase_Ascii(realName, "m")) {
+    if (value.vt == VT_BSTR && StringsAreEqualNoCase_Ascii(realName, "memuse")) {
+      // not implemented here (see one of the ParseSizeString variants), 
+      // but don't throw error - just return without to restrict mem-usage (handler may do that).
+      return S_OK;
+    }
+    return ParseParamsFromPROPVARIANT(realName, value);
+  }
+  // **************** 7-Zip ZS Modification End ****************
   // -m{N}=method
   if (value.vt != VT_BSTR)
     return E_INVALIDARG;

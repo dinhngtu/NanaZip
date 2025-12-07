@@ -1,4 +1,4 @@
-﻿// FoldersPage.cpp
+// FoldersPage.cpp
 
 #include "StdAfx.h"
 
@@ -6,10 +6,15 @@
 #include "FoldersPage.h"
 
 #include "../FileManager/BrowseDialog.h"
+// **************** NanaZip Modification Start ****************
+// Removed from NanaZip.
+#include "../FileManager/HelpUtils.h"
+// **************** NanaZip Modification End ****************
 #include "../FileManager/LangUtils.h"
 
 using namespace NWindows;
 
+#ifdef Z7_LANG
 static const UInt32 kLangIDs[] =
 {
   IDT_FOLDERS_WORKING_FOLDER,
@@ -18,27 +23,37 @@ static const UInt32 kLangIDs[] =
   IDR_FOLDERS_WORK_SPECIFIED,
   IDX_FOLDERS_WORK_FOR_REMOVABLE
 };
+#endif
 
-static const int kWorkModeButtons[] =
+static const unsigned kWorkModeButtons[] =
 {
   IDR_FOLDERS_WORK_SYSTEM,
   IDR_FOLDERS_WORK_CURRENT,
   IDR_FOLDERS_WORK_SPECIFIED
 };
 
-static const unsigned kNumWorkModeButtons = ARRAY_SIZE(kWorkModeButtons);
+// **************** NanaZip Modification Start ****************
+// Removed from NanaZip.
+#define kFoldersTopic "fm/options.htm#folders"
+// **************** NanaZip Modification End ****************
+
+static const unsigned kNumWorkModeButtons = Z7_ARRAY_SIZE(kWorkModeButtons);
 
 bool CFoldersPage::OnInit()
 {
   _initMode = true;
   _needSave = false;
 
-  LangSetDlgItems(*this, kLangIDs, ARRAY_SIZE(kLangIDs));
+  #ifdef Z7_LANG
+  LangSetDlgItems(*this, kLangIDs, Z7_ARRAY_SIZE(kLangIDs));
+  #endif
   m_WorkDirInfo.Load();
 
   CheckButton(IDX_FOLDERS_WORK_FOR_REMOVABLE, m_WorkDirInfo.ForRemovableOnly);
 
-  CheckRadioButton(kWorkModeButtons[0], kWorkModeButtons[kNumWorkModeButtons - 1],
+  CheckRadioButton(
+      kWorkModeButtons[0],
+      kWorkModeButtons[kNumWorkModeButtons - 1],
       kWorkModeButtons[m_WorkDirInfo.Mode]);
 
   m_WorkPath.Init(*this, IDE_FOLDERS_WORK_PATH);
@@ -55,7 +70,7 @@ int CFoldersPage::GetWorkMode() const
 {
   for (unsigned i = 0; i < kNumWorkModeButtons; i++)
     if (IsButtonCheckedBool(kWorkModeButtons[i]))
-      return i;
+      return (int)i;
   throw 0;
 }
 
@@ -101,7 +116,7 @@ void CFoldersPage::ModifiedEvent()
   */
 }
 
-bool CFoldersPage::OnButtonClicked(int buttonID, HWND buttonHWND)
+bool CFoldersPage::OnButtonClicked(unsigned buttonID, HWND buttonHWND)
 {
   for (unsigned i = 0; i < kNumWorkModeButtons; i++)
     if (buttonID == kWorkModeButtons[i])
@@ -126,7 +141,7 @@ bool CFoldersPage::OnButtonClicked(int buttonID, HWND buttonHWND)
   return true;
 }
 
-bool CFoldersPage::OnCommand(int code, int itemID, LPARAM lParam)
+bool CFoldersPage::OnCommand(unsigned code, unsigned itemID, LPARAM lParam)
 {
   if (code == EN_CHANGE && itemID == IDE_FOLDERS_WORK_PATH)
   {
@@ -156,3 +171,13 @@ LONG CFoldersPage::OnApply()
   }
   return PSNRET_NOERROR;
 }
+
+// **************** NanaZip Modification Start ****************
+// Removed from NanaZip.
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
+void CFoldersPage::OnNotifyHelp()
+{
+  ShowHelpWindow(kFoldersTopic);
+}
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+// **************** NanaZip Modification End ****************

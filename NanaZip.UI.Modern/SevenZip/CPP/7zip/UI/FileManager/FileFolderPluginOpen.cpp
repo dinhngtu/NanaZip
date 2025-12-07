@@ -1,4 +1,4 @@
-﻿// FileFolderPluginOpen.cpp
+// FileFolderPluginOpen.cpp
 
 #include "StdAfx.h"
 
@@ -26,8 +26,15 @@ struct CThreadArchiveOpen
   UString ArcFormat;
   CMyComPtr<IInStream> InStream;
   CMyComPtr<IFolderManager> FolderManager;
-  CMyComPtr<IProgress> OpenCallback;
+  CMyComPtr<IProgress> OpenCallbackProgress;
+  
   COpenArchiveCallback *OpenCallbackSpec;
+  /*
+  CMyComPtr<IUnknown>
+  // CMyComPtr<IProgress>
+  // CMyComPtr<IArchiveOpenCallback>
+    OpenCallbackSpec_Ref;
+  */
 
   CMyComPtr<IFolderFolder> Folder;
   HRESULT Result;
@@ -37,11 +44,11 @@ struct CThreadArchiveOpen
     try
     {
       CProgressCloser closer(OpenCallbackSpec->ProgressDialog);
-      Result = FolderManager->OpenFolderFile(InStream, Path, ArcFormat, &Folder, OpenCallback);
+      Result = FolderManager->OpenFolderFile(InStream, Path, ArcFormat, &Folder, OpenCallbackProgress);
     }
     catch(...) { Result = E_FAIL; }
   }
-
+  
   static THREAD_FUNC_DECL MyThreadFunction(void *param)
   {
     ((CThreadArchiveOpen *)param)->Process();
@@ -62,7 +69,7 @@ static int FindPlugin(const CObjectVector<CPluginInfo> &plugins, const UString &
 static void SplitNameToPureNameAndExtension(const FString &fullName,
     FString &pureName, FString &extensionDelimiter, FString &extension)
 {
-  int index = fullName.ReverseFind_Dot();
+  const int index = fullName.ReverseFind_Dot();
   if (index < 0)
   {
     pureName = fullName;
@@ -71,7 +78,7 @@ static void SplitNameToPureNameAndExtension(const FString &fullName,
   }
   else
   {
-    pureName.SetFrom(fullName, index);
+    pureName.SetFrom(fullName, (unsigned)index);
     extensionDelimiter = '.';
     extension = fullName.Ptr((unsigned)index + 1);
   }
@@ -103,7 +110,7 @@ static void GetFolderLevels(CMyComPtr<IFolderFolder> &folder, CArcLevelsInfo &le
 
   CMyComPtr<IGetFolderArcProps> getFolderArcProps;
   folder.QueryInterface(IID_IGetFolderArcProps, &getFolderArcProps);
-
+  
   if (!getFolderArcProps)
     return;
   CMyComPtr<IFolderArcProps> arcProps;
@@ -114,13 +121,13 @@ static void GetFolderLevels(CMyComPtr<IFolderFolder> &folder, CArcLevelsInfo &le
   UInt32 numLevels;
   if (arcProps->GetArcNumLevels(&numLevels) != S_OK)
     numLevels = 0;
-
+  
   for (UInt32 level = 0; level <= numLevels; level++)
   {
     const PROPID propIDs[] = { kpidError, kpidPath, kpidType, kpidErrorType };
 
     CArcLevelInfo lev;
-
+    
     for (Int32 i = 0; i < 4; i++)
     {
       CMyComBSTR name;
@@ -154,12 +161,12 @@ static void GetFolderLevels(CMyComPtr<IFolderFolder> &folder, CArcLevelsInfo &le
     levels.Levels.Add(lev);
   }
 }
-
+    
 static UString GetBracedType(const wchar_t *type)
 {
   UString s ('[');
   s += type;
-  s += ']';
+  s.Add_Char(']');
   return s;
 }
 
@@ -176,7 +183,7 @@ static void GetFolderError(CMyComPtr<IFolderFolder> &folder, UString &open_Error
     const CArcLevelInfo &lev = levs.Levels[levs.Levels.Size() - 1 - i];
 
     UString m;
-
+    
     if (!lev.ErrorType.IsEmpty())
     {
       m = MyFormatNew(IDS_CANT_OPEN_AS_TYPE, GetBracedType(lev.ErrorType));
@@ -206,7 +213,7 @@ static void GetFolderError(CMyComPtr<IFolderFolder> &folder, UString &open_Error
       m += ": ";
       m += lev.ErrorFlags;
     }
-
+    
     if (!m.IsEmpty())
     {
       if (isNonOpenLevel)
@@ -229,16 +236,21 @@ static void GetFolderError(CMyComPtr<IFolderFolder> &folder, UString &open_Error
   }
 }
 
+#ifdef _MSC_VER
+#pragma warning(error : 4702) // unreachable code
+#endif
 
 HRESULT CFfpOpen::OpenFileFolderPlugin(IInStream *inStream,
     const FString &path, const UString &arcFormat, HWND parentWindow)
 {
+  /*
   CObjectVector<CPluginInfo> plugins;
   ReadFileFolderPluginInfoList(plugins);
+  */
 
   FString extension, name, pureName, dot;
 
-  int slashPos = path.ReverseFind_PathSepar();
+  const int slashPos = path.ReverseFind_PathSepar();
   FString dirPrefix;
   FString fileName;
   if (slashPos >= 0)
@@ -273,31 +285,48 @@ HRESULT CFfpOpen::OpenFileFolderPlugin(IInStream *inStream,
 
   ErrorMessage.Empty();
 
-  FOR_VECTOR (i, plugins)
-  {
+  // FOR_VECTOR (i, plugins)
+  // {
+    /*
     const CPluginInfo &plugin = plugins[i];
-    if (!plugin.ClassIDDefined)
+    if (!plugin.ClassID_Defined && !plugin.FilePath.IsEmpty())
       continue;
+    */
     CPluginLibrary library;
 
     CThreadArchiveOpen t;
 
-    if (plugin.FilePath.IsEmpty())
+    // if (plugin.FilePath.IsEmpty())
       t.FolderManager = new CArchiveFolderManager;
+    /*
     else if (library.LoadAndCreateManager(plugin.FilePath, plugin.ClassID, &t.FolderManager) != S_OK)
       continue;
+    */
 
+    COpenArchiveCallback OpenCallbackSpec_loc;
+    t.OpenCallbackSpec = &OpenCallbackSpec_loc;
+    /*
     t.OpenCallbackSpec = new COpenArchiveCallback;
-    t.OpenCallback = t.OpenCallbackSpec;
+    t.OpenCallbackSpec_Ref = t.OpenCallbackSpec;
+    */
     t.OpenCallbackSpec->PasswordIsDefined = Encrypted;
     t.OpenCallbackSpec->Password = Password;
     t.OpenCallbackSpec->ParentWindow = parentWindow;
 
+    /* COpenCallbackImp object will exist after Open stage for multivolume archives */
+    COpenCallbackImp *openCallbackSpec = new COpenCallbackImp;
+    t.OpenCallbackProgress = openCallbackSpec;
+    // openCallbackSpec->Callback_Ref = t.OpenCallbackSpec;
+    // we set pointer without reference counter:
+    openCallbackSpec->Callback =
+    // openCallbackSpec->ReOpenCallback =
+      t.OpenCallbackSpec;
+
     if (inStream)
-      t.OpenCallbackSpec->SetSubArchiveName(fs2us(fileName));
+      openCallbackSpec->SetSubArchiveName(fs2us(fileName));
     else
     {
-      RINOK(t.OpenCallbackSpec->LoadFileInfo2(dirPrefix, fileName));
+      RINOK(openCallbackSpec->Init2(dirPrefix, fileName))
     }
 
     t.InStream = inStream;
@@ -308,16 +337,26 @@ HRESULT CFfpOpen::OpenFileFolderPlugin(IInStream *inStream,
     {
       CProgressDialog &pd = t.OpenCallbackSpec->ProgressDialog;
       pd.MainWindow = parentWindow;
-      pd.MainTitle = "NanaZip"; // LangString(IDS_APP_TITLE);
+      pd.MainTitle = "7-Zip"; // LangString(IDS_APP_TITLE);
       pd.MainAddTitle = progressTitle + L' ';
       pd.WaitMode = true;
     }
 
     {
       NWindows::CThread thread;
-      RINOK(thread.Create(CThreadArchiveOpen::MyThreadFunction, &t));
+      const WRes wres = thread.Create(CThreadArchiveOpen::MyThreadFunction, &t);
+      if (wres != 0)
+        return HRESULT_FROM_WIN32(wres);
       t.OpenCallbackSpec->StartProgressDialog(progressTitle, thread);
     }
+
+    /*
+      if archive is multivolume:
+      COpenCallbackImp object will exist after Open stage.
+      COpenCallbackImp object will be deleted when last reference
+      from each volume object (CInFileStreamVol) will be closed (when archive will be closed).
+    */
+    t.OpenCallbackProgress.Release();
 
     if (t.Result != S_FALSE && t.Result != S_OK)
       return t.Result;
@@ -349,9 +388,7 @@ HRESULT CFfpOpen::OpenFileFolderPlugin(IInStream *inStream,
       // Folder.Attach(t.Folder.Detach());
       Folder = t.Folder;
     }
-
+    
     return t.Result;
-  }
-
-  return S_FALSE;
+  // }
 }

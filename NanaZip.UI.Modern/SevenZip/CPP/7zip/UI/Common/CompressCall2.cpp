@@ -1,6 +1,8 @@
-﻿// CompressCall2.cpp
+// CompressCall2.cpp
 
 #include "StdAfx.h"
+
+#ifndef Z7_EXTERNAL_CODECS
 
 #include "../../../Common/MyException.h"
 
@@ -33,7 +35,7 @@ static void ThrowException_if_Error(HRESULT res)
     throw CSystemException(res);
 }
 
-#ifdef EXTERNAL_CODECS
+#ifdef Z7_EXTERNAL_CODECS
 
 #define CREATE_CODECS \
   CCodecs *codecs = new CCodecs; \
@@ -42,10 +44,10 @@ static void ThrowException_if_Error(HRESULT res)
   Codecs_AddHashArcHandler(codecs);
 
 #define LOAD_EXTERNAL_CODECS \
-    CExternalCodecs __externalCodecs; \
-    __externalCodecs.GetCodecs = codecs; \
-    __externalCodecs.GetHashers = codecs; \
-    ThrowException_if_Error(__externalCodecs.Load());
+    CExternalCodecs _externalCodecs; \
+    _externalCodecs.GetCodecs = codecs; \
+    _externalCodecs.GetHashers = codecs; \
+    ThrowException_if_Error(_externalCodecs.Load());
 
 #else
 
@@ -62,17 +64,25 @@ static void ThrowException_if_Error(HRESULT res)
 
 
 
+// **************** 7-Zip ZS Modification Start ****************
+// Removed in 7-Zip ZS.
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
 UString GetQuotedString(const UString &s)
 {
   UString s2 ('\"');
   s2 += s;
-  s2 += '\"';
+  s2.Add_Char('\"');
   return s2;
 }
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+// **************** 7-Zip ZS Modification End ****************
 
 static void ErrorMessage(LPCWSTR message)
 {
+  // **************** NanaZip Modification Start ****************
+  // MessageBoxW(g_HWND, message, L"7-Zip", MB_ICONERROR);
   MessageBoxW(g_HWND, message, L"NanaZip", MB_ICONERROR);
+  // **************** NanaZip Modification End ****************
 }
 
 static void ErrorMessageHRESULT(HRESULT res)
@@ -321,3 +331,5 @@ void Benchmark(bool totalMode)
 
   MY_TRY_FINISH
 }
+
+#endif

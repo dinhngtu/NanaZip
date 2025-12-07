@@ -47,8 +47,6 @@ UString GetOsPath_Remove_TailSlash(const UString &name)
 }
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 #if WCHAR_PATH_SEPARATOR != L'/'
 void ReplaceToWinSlashes(UString &name, bool useBackslashReplacement)
 {
@@ -80,11 +78,10 @@ void ReplaceToOsSlashes_Remove_TailSlash(UString &name, bool
   #if WCHAR_PATH_SEPARATOR != L'/'
   ReplaceToWinSlashes(name, useBackslashReplacement);
   #endif
-
+    
   if (name.Back() == kOsPathSepar)
     name.DeleteBack();
 }
-// **************** NanaZip Modification End ****************
 
 
 void NormalizeSlashes_in_FileName_for_OsPath(wchar_t *name, unsigned len)

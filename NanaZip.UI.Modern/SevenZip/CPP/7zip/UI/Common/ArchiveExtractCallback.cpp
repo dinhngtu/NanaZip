@@ -6,11 +6,9 @@
 #undef printf
 
 // #include <stdio.h>
-// #include "../../../../C/CpuTicks.h"
 
 #include "../../../../C/Alloc.h"
 #include "../../../../C/CpuArch.h"
-
 
 #include "../../../Common/ComTry.h"
 #include "../../../Common/IntToString.h"
@@ -25,18 +23,15 @@
 #include "../../../Windows/PropVariant.h"
 #include "../../../Windows/PropVariantConv.h"
 
-#if defined(_WIN32) && !defined(UNDER_CE)  && !defined(_SFX)
-#define _USE_SECURITY_CODE
+#if defined(_WIN32) && !defined(UNDER_CE)  && !defined(Z7_SFX)
+#define Z7_USE_SECURITY_CODE
 #include "../../../Windows/SecurityUtils.h"
 #endif
 
 #include "../../Common/FilePathAutoRename.h"
 #include "../../Common/StreamUtils.h"
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 #include "../../Archive/Common/ItemNameUtils.h"
-// **************** NanaZip Modification End ****************
 
 #include "../Common/ExtractingFilePath.h"
 #include "../Common/PropIDUtils.h"
@@ -52,21 +47,18 @@ static const char * const kCantRenameFile = "Cannot rename existing file";
 static const char * const kCantDeleteOutputFile = "Cannot delete output file";
 static const char * const kCantDeleteOutputDir = "Cannot delete output folder";
 static const char * const kCantOpenOutFile = "Cannot open output file";
+#ifndef Z7_SFX
 static const char * const kCantOpenInFile = "Cannot open input file";
+#endif
 static const char * const kCantSetFileLen = "Cannot set length for output file";
 #ifdef SUPPORT_LINKS
 static const char * const kCantCreateHardLink = "Cannot create hard link";
 static const char * const kCantCreateSymLink = "Cannot create symbolic link";
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 static const char * const k_HardLink_to_SymLink_Ignored = "Hard link to symbolic link was ignored";
 static const char * const k_CantDelete_File_for_SymLink = "Cannot delete file for symbolic link creation";
 static const char * const k_CantDelete_Dir_for_SymLink = "Cannot delete directory for symbolic link creation";
-// **************** NanaZip Modification End ****************
 #endif
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 static const unsigned k_LinkDataSize_LIMIT = 1 << 12;
 
 #ifdef SUPPORT_LINKS
@@ -80,11 +72,10 @@ static const unsigned k_LinkDataSize_LIMIT = 1 << 12;
   #define REPLACE_SLASHES_from_Linux_to_Sys(s)
 #endif
 #endif
-// **************** NanaZip Modification End ****************
 
-#ifndef _SFX
+#ifndef Z7_SFX
 
-STDMETHODIMP COutStreamWithHash::Write(const void *data, UInt32 size, UInt32 *processedSize)
+Z7_COM7F_IMF(COutStreamWithHash::Write(const void *data, UInt32 size, UInt32 *processedSize))
 {
   HRESULT result = S_OK;
   if (_stream)
@@ -97,10 +88,10 @@ STDMETHODIMP COutStreamWithHash::Write(const void *data, UInt32 size, UInt32 *pr
   return result;
 }
 
-#endif // _SFX
+#endif // Z7_SFX
 
 
-#ifdef _USE_SECURITY_CODE
+#ifdef Z7_USE_SECURITY_CODE
 bool InitLocalPrivileges();
 bool InitLocalPrivileges()
 {
@@ -110,21 +101,21 @@ bool InitLocalPrivileges()
     return false;
 
   TOKEN_PRIVILEGES tp;
-
+ 
   tp.PrivilegeCount = 1;
   tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
+  
   if  (!::LookupPrivilegeValue(NULL, SE_SECURITY_NAME, &tp.Privileges[0].Luid))
     return false;
   if (!token.AdjustPrivileges(&tp))
     return false;
   return (GetLastError() == ERROR_SUCCESS);
 }
-#endif // _USE_SECURITY_CODE
+#endif // Z7_USE_SECURITY_CODE
 
 
 
-#if defined(_WIN32) && !defined(UNDER_CE) && !defined(_SFX)
+#if defined(_WIN32) && !defined(UNDER_CE) && !defined(Z7_SFX)
 
 static const char * const kOfficeExtensions =
   " doc dot wbk"
@@ -151,14 +142,14 @@ static bool FindExt2(const char *p, const UString &name)
     return false;
 
   AString s;
-  for (unsigned pos = dotPos + 1;; pos++)
+  for (unsigned pos = (unsigned)(dotPos + 1);; pos++)
   {
     const wchar_t c = name[pos];
     if (c <= 0)
       break;
     if (c >= 0x80)
       return false;
-    s += (char)MyCharLower_Ascii((char)c);
+    s.Add_Char((char)MyCharLower_Ascii((char)c));
   }
   for (unsigned i = 0; p[i] != 0;)
   {
@@ -172,32 +163,25 @@ static bool FindExt2(const char *p, const UString &name)
 }
 
 
-static const FChar * const k_ZoneId_StreamName = FTEXT(":Zone.Identifier");
+static const char * const k_ZoneId_StreamName_With_Colon_Prefix = ":Zone.Identifier";
 
-
-// **************** NanaZip Modification Start ****************
-// Backported from 24.09 with changes.
-// Used k_ZoneId_StreamName instead of upstream
-// k_ZoneId_StreamName_With_Colon_Prefix.
 bool Is_ZoneId_StreamName(const wchar_t *s)
 {
-  return StringsAreEqualNoCase_Ascii(s, k_ZoneId_StreamName + 1);
+  return StringsAreEqualNoCase_Ascii(s, k_ZoneId_StreamName_With_Colon_Prefix + 1);
 }
-// **************** NanaZip Modification End ****************
 
-void ReadZoneFile_Of_BaseFile(CFSTR fileName2, CByteBuffer &buf)
+void ReadZoneFile_Of_BaseFile(CFSTR fileName, CByteBuffer &buf)
 {
-  FString fileName = fileName2;
-  fileName += k_ZoneId_StreamName;
-
   buf.Free();
+  FString path (fileName);
+  path += k_ZoneId_StreamName_With_Colon_Prefix;
   NIO::CInFile file;
-  if (!file.Open(fileName))
+  if (!file.Open(path))
     return;
   UInt64 fileSize;
   if (!file.GetLength(fileSize))
     return;
-  if (fileSize == 0 || fileSize >= ((UInt32)1 << 16))
+  if (fileSize == 0 || fileSize >= (1u << 15))
     return;
   buf.Alloc((size_t)fileSize);
   size_t processed;
@@ -206,31 +190,15 @@ void ReadZoneFile_Of_BaseFile(CFSTR fileName2, CByteBuffer &buf)
   buf.Free();
 }
 
-// **************** NanaZip Modification Start ****************
-// Deleted from 24.05.
-//static bool WriteZoneFile(CFSTR fileName, const CByteBuffer &buf)
-//{
-//  NIO::COutFile file;
-//  if (!file.Create(fileName, true))
-//    return false;
-//  return file.WriteFull(buf, buf.Size());
-//}
-// **************** NanaZip Modification End ****************
-
-// **************** NanaZip Modification Start ****************
-// Backported from 24.09 with changes.
-// Used k_ZoneId_StreamName instead of upstream
-// k_ZoneId_StreamName_With_Colon_Prefix.
 bool WriteZoneFile_To_BaseFile(CFSTR fileName, const CByteBuffer &buf)
 {
   FString path (fileName);
-  path += k_ZoneId_StreamName;
+  path += k_ZoneId_StreamName_With_Colon_Prefix;
   NIO::COutFile file;
-  if (!file.Create(path, true))
+  if (!file.Create_ALWAYS(path))
     return false;
   return file.WriteFull(buf, buf.Size());
 }
-// **************** NanaZip Modification End ****************
 
 #endif
 
@@ -251,13 +219,13 @@ static HRESULT Archive_Get_HardLinkNode(IInArchive *archive, UInt32 index, CHard
   defined = false;
   {
     NCOM::CPropVariant prop;
-    RINOK(archive->GetProperty(index, kpidINode, &prop));
+    RINOK(archive->GetProperty(index, kpidINode, &prop))
     if (!ConvertPropVariantToUInt64(prop, h.INode))
       return S_OK;
   }
   {
     NCOM::CPropVariant prop;
-    RINOK(archive->GetProperty(index, kpidStreamId, &prop));
+    RINOK(archive->GetProperty(index, kpidStreamId, &prop))
     ConvertPropVariantToUInt64(prop, h.StreamId);
   }
   defined = true;
@@ -271,8 +239,8 @@ HRESULT CArchiveExtractCallback::PrepareHardLinks(const CRecordVector<UInt32> *r
 
   if (!_arc->Ask_INode)
     return S_OK;
-
-  IInArchive *archive = _arc->Archive;
+  
+  IInArchive * const archive = _arc->Archive;
   CRecordVector<CHardLinkNode> &hardIDs = _hardLinks.IDs;
 
   {
@@ -281,28 +249,33 @@ HRESULT CArchiveExtractCallback::PrepareHardLinks(const CRecordVector<UInt32> *r
       numItems = realIndices->Size();
     else
     {
-      RINOK(archive->GetNumberOfItems(&numItems));
+      RINOK(archive->GetNumberOfItems(&numItems))
     }
 
     for (UInt32 i = 0; i < numItems; i++)
     {
       CHardLinkNode h;
       bool defined;
-      UInt32 realIndex = realIndices ? (*realIndices)[i] : i;
+      const UInt32 realIndex = realIndices ? (*realIndices)[i] : i;
 
-      RINOK(Archive_Get_HardLinkNode(archive, realIndex, h, defined));
+      RINOK(Archive_Get_HardLinkNode(archive, realIndex, h, defined))
       if (defined)
       {
         bool isAltStream = false;
-        RINOK(Archive_IsItem_AltStream(archive, realIndex, isAltStream));
+        RINOK(Archive_IsItem_AltStream(archive, realIndex, isAltStream))
         if (!isAltStream)
-          hardIDs.Add(h);
+        {
+          bool isDir = false;
+          RINOK(Archive_IsItem_Dir(archive, realIndex, isDir))
+          if (!isDir)
+            hardIDs.Add(h);
+        }
       }
     }
   }
-
+  
   hardIDs.Sort2();
-
+  
   {
     // we keep only items that have 2 or more items
     unsigned k = 0;
@@ -320,7 +293,7 @@ HRESULT CArchiveExtractCallback::PrepareHardLinks(const CRecordVector<UInt32> *r
     }
     hardIDs.DeleteFrom(k);
   }
-
+  
   _hardLinks.PrepareLinks();
   return S_OK;
 }
@@ -329,20 +302,14 @@ HRESULT CArchiveExtractCallback::PrepareHardLinks(const CRecordVector<UInt32> *r
 
 
 CArchiveExtractCallback::CArchiveExtractCallback():
-    _arc(NULL),
-    Write_CTime(true),
-    Write_ATime(true),
-    Write_MTime(true),
-    // **************** NanaZip Modification Start ****************
-    // Backported from 24.05.
+    // Write_CTime(true),
+    // Write_ATime(true),
+    // Write_MTime(true),
     Is_elimPrefix_Mode(false),
-    // **************** NanaZip Modification End ****************
+    _arc(NULL),
     _multiArchives(false)
 {
-  LocalProgressSpec = new CLocalProgress();
-  _localProgress = LocalProgressSpec;
-
-  #ifdef _USE_SECURITY_CODE
+  #ifdef Z7_USE_SECURITY_CODE
   _saclEnabled = InitLocalPrivileges();
   #endif
 }
@@ -350,9 +317,9 @@ CArchiveExtractCallback::CArchiveExtractCallback():
 
 void CArchiveExtractCallback::InitBeforeNewArchive()
 {
- #if defined(_WIN32) && !defined(UNDER_CE)
+#if defined(_WIN32) && !defined(UNDER_CE) && !defined(Z7_SFX)
   ZoneBuf.Free();
- #endif
+#endif
 }
 
 void CArchiveExtractCallback::Init(
@@ -368,44 +335,36 @@ void CArchiveExtractCallback::Init(
   ClearExtractedDirsInfo();
   _outFileStream.Release();
   _bufPtrSeqOutStream.Release();
-
-  #ifdef SUPPORT_LINKS
+  
+#ifdef SUPPORT_LINKS
   _hardLinks.Clear();
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.01.
   _postLinks.Clear();
-  // **************** NanaZip Modification End ****************
-  #endif
+#endif
 
-  #ifdef SUPPORT_ALT_STREAMS
+#ifdef SUPPORT_ALT_STREAMS
   _renamedFiles.Clear();
-  #endif
+#endif
 
   _ntOptions = ntOptions;
   _wildcardCensor = wildcardCensor;
-
   _stdOutMode = stdOutMode;
   _testMode = testMode;
-
-  // _progressTotal = 0;
-  // _progressTotal_Defined = false;
-
   _packTotal = packSize;
   _progressTotal = packSize;
-  _progressTotal_Defined = true;
-
+  // _progressTotal = 0;
+  // _progressTotal_Defined = false;
+  // _progressTotal_Defined = true;
   _extractCallback2 = extractCallback2;
-
+  /*
   _compressProgress.Release();
   _extractCallback2.QueryInterface(IID_ICompressProgressInfo, &_compressProgress);
-
   _callbackMessage.Release();
-  _extractCallback2.QueryInterface(IID_IArchiveExtractCallbackMessage, &_callbackMessage);
-
+  _extractCallback2.QueryInterface(IID_IArchiveExtractCallbackMessage2, &_callbackMessage);
+  */
   _folderArchiveExtractCallback2.Release();
   _extractCallback2.QueryInterface(IID_IFolderArchiveExtractCallback2, &_folderArchiveExtractCallback2);
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
 
   ExtractToStreamCallback.Release();
   _extractCallback2.QueryInterface(IID_IFolderExtractToStreamCallback, &ExtractToStreamCallback);
@@ -417,16 +376,16 @@ void CArchiveExtractCallback::Init(
     if (useStreams == 0)
       ExtractToStreamCallback.Release();
   }
-
+  
   #endif
 
   LocalProgressSpec->Init(extractCallback2, true);
   LocalProgressSpec->SendProgress = false;
-
+ 
   _removePathParts = removePathParts;
   _removePartsForAltStreams = removePartsForAltStreams;
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
   _baseParentFolder = (UInt32)(Int32)-1;
   _use_baseParentFolder_mode = false;
   #endif
@@ -445,11 +404,11 @@ void CArchiveExtractCallback::Init(
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::SetTotal(UInt64 size)
+Z7_COM7F_IMF(CArchiveExtractCallback::SetTotal(UInt64 size))
 {
   COM_TRY_BEGIN
   _progressTotal = size;
-  _progressTotal_Defined = true;
+  // _progressTotal_Defined = true;
   if (!_multiArchives && _extractCallback2)
     return _extractCallback2->SetTotal(size);
   return S_OK;
@@ -478,10 +437,10 @@ static UInt64 MyMultDiv64(UInt64 unpCur, UInt64 unpTotal, UInt64 packTotal)
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::SetCompleted(const UInt64 *completeValue)
+Z7_COM7F_IMF(CArchiveExtractCallback::SetCompleted(const UInt64 *completeValue))
 {
   COM_TRY_BEGIN
-
+  
   if (!_extractCallback2)
     return S_OK;
 
@@ -489,36 +448,31 @@ STDMETHODIMP CArchiveExtractCallback::SetCompleted(const UInt64 *completeValue)
   if (_multiArchives)
   {
     packCur = LocalProgressSpec->InSize;
-    if (completeValue && _progressTotal_Defined)
+    if (completeValue /* && _progressTotal_Defined */)
       packCur += MyMultDiv64(*completeValue, _progressTotal, _packTotal);
     completeValue = &packCur;
   }
   return _extractCallback2->SetCompleted(completeValue);
-
+ 
   COM_TRY_END
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::SetRatioInfo(const UInt64 *inSize, const UInt64 *outSize)
+Z7_COM7F_IMF(CArchiveExtractCallback::SetRatioInfo(const UInt64 *inSize, const UInt64 *outSize))
 {
   COM_TRY_BEGIN
-  return _localProgress->SetRatioInfo(inSize, outSize);
+  return LocalProgressSpec.Interface()->SetRatioInfo(inSize, outSize);
   COM_TRY_END
 }
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
-// **************** NanaZip Modification End ****************
-//void CArchiveExtractCallback::CreateComplexDirectory(const UStringVector &dirPathParts, FString &fullPath)
 void CArchiveExtractCallback::CreateComplexDirectory(
     const UStringVector &dirPathParts, bool isFinal, FString &fullPath)
-// **************** NanaZip Modification End ****************
 {
   // we use (_item.IsDir) in this function
 
   bool isAbsPath = false;
-
+  
   if (!dirPathParts.IsEmpty())
   {
     const UString &s = dirPathParts[0];
@@ -532,7 +486,7 @@ void CArchiveExtractCallback::CreateComplexDirectory(
     }
     #endif
   }
-
+  
   if (_pathMode == NExtract::NPathMode::kAbsPaths && isAbsPath)
     fullPath.Empty();
   else
@@ -545,12 +499,8 @@ void CArchiveExtractCallback::CreateComplexDirectory(
     const UString &s = dirPathParts[i];
     fullPath += us2fs(s);
 
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.01.
-    //const bool isFinalDir = (i == dirPathParts.Size() - 1 && _item.IsDir);
     const bool isFinalDir = (i == dirPathParts.Size() - 1 && isFinal && _item.IsDir);
-    // **************** NanaZip Modification End ****************
-
+    
     if (fullPath.IsEmpty())
     {
       if (isFinalDir)
@@ -571,16 +521,15 @@ void CArchiveExtractCallback::CreateComplexDirectory(
       }
     #endif
 
-    // bool res =
-    CreateDir(fullPath);
-    // if (!res)
+    HRESULT hres = S_OK;
+    if (!CreateDir(fullPath))
+      hres = GetLastError_noZero_HRESULT();
     if (isFinalDir)
     {
       if (!NFile::NFind::DoesDirExist(fullPath))
       {
         _itemFailure = true;
-        SendMessageError("Cannot create folder", fullPath);
-        // SendMessageError_with_LastError()
+        SendMessageError_with_Error(hres, "Cannot create folder", fullPath);
       }
     }
   }
@@ -591,7 +540,7 @@ HRESULT CArchiveExtractCallback::GetTime(UInt32 index, PROPID propID, CArcTime &
 {
   ft.Clear();
   NCOM::CPropVariant prop;
-  RINOK(_arc->Archive->GetProperty(index, propID, &prop));
+  RINOK(_arc->Archive->GetProperty(index, propID, &prop))
   if (prop.vt == VT_FILETIME)
     ft.Set_From_Prop(prop);
   else if (prop.vt != VT_EMPTY)
@@ -602,7 +551,7 @@ HRESULT CArchiveExtractCallback::GetTime(UInt32 index, PROPID propID, CArcTime &
 
 HRESULT CArchiveExtractCallback::GetUnpackSize()
 {
-  return _arc->GetItem_Size(_index, _curSize, _curSizeDefined);
+  return _arc->GetItem_Size(_index, _curSize, _curSize_Defined);
 }
 
 static void AddPathToMessage(UString &s, const FString &path)
@@ -611,19 +560,14 @@ static void AddPathToMessage(UString &s, const FString &path)
   s += fs2us(path);
 }
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
-//HRESULT CArchiveExtractCallback::SendMessageError(const char *message, const FString &path)
 HRESULT CArchiveExtractCallback::SendMessageError(const char *message, const FString &path) const
-// **************** NanaZip Modification End ****************
 {
   UString s (message);
   AddPathToMessage(s, path);
   return _extractCallback2->MessageError(s);
 }
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
+
 HRESULT CArchiveExtractCallback::SendMessageError_with_Error(HRESULT errorCode, const char *message, const FString &path) const
 {
   UString s (message);
@@ -635,22 +579,14 @@ HRESULT CArchiveExtractCallback::SendMessageError_with_Error(HRESULT errorCode, 
   AddPathToMessage(s, path);
   return _extractCallback2->MessageError(s);
 }
-// **************** NanaZip Modification End ****************
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 HRESULT CArchiveExtractCallback::SendMessageError_with_LastError(const char *message, const FString &path) const
 {
   const HRESULT errorCode = GetLastError_noZero_HRESULT();
   return SendMessageError_with_Error(errorCode, message, path);
 }
-// **************** NanaZip Modification End ****************
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
-//HRESULT CArchiveExtractCallback::SendMessageError2(HRESULT errorCode, const char *message, const FString &path1, const FString &path2)
 HRESULT CArchiveExtractCallback::SendMessageError2(HRESULT errorCode, const char *message, const FString &path1, const FString &path2) const
-// **************** NanaZip Modification End ****************
 {
   UString s (message);
   if (errorCode != 0)
@@ -663,25 +599,32 @@ HRESULT CArchiveExtractCallback::SendMessageError2(HRESULT errorCode, const char
   return _extractCallback2->MessageError(s);
 }
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 HRESULT CArchiveExtractCallback::SendMessageError2_with_LastError(
     const char *message, const FString &path1, const FString &path2) const
 {
   const HRESULT errorCode = GetLastError_noZero_HRESULT();
   return SendMessageError2(errorCode, message, path1, path2);
 }
-// **************** NanaZip Modification End ****************
 
-#ifndef _SFX
+#ifndef Z7_SFX
 
-STDMETHODIMP CGetProp::GetProp(PROPID propID, PROPVARIANT *value)
+Z7_CLASS_IMP_COM_1(
+  CGetProp
+  , IGetProp
+)
+public:
+  UInt32 IndexInArc;
+  const CArc *Arc;
+  // UString BaseName; // relative path
+};
+
+Z7_COM7F_IMF(CGetProp::GetProp(PROPID propID, PROPVARIANT *value))
 {
   /*
-  if (propID == kpidName)
+  if (propID == kpidBaseName)
   {
     COM_TRY_BEGIN
-    NCOM::CPropVariant prop = Name;
+    NCOM::CPropVariant prop = BaseName;
     prop.Detach(value);
     return S_OK;
     COM_TRY_END
@@ -690,47 +633,19 @@ STDMETHODIMP CGetProp::GetProp(PROPID propID, PROPVARIANT *value)
   return Arc->Archive->GetProperty(IndexInArc, propID, value);
 }
 
-#endif // _SFX
+#endif // Z7_SFX
 
-
-// **************** NanaZip Modification Start ****************
-// Deleted from 25.00.
-//#ifdef SUPPORT_LINKS
-//
-//static UString GetDirPrefixOf(const UString &src)
-//{
-//  UString s (src);
-//  if (!s.IsEmpty())
-//  {
-//    if (IsPathSepar(s.Back()))
-//      s.DeleteBack();
-//    int pos = s.ReverseFind_PathSepar();
-//    s.DeleteFrom((unsigned)(pos + 1));
-//  }
-//  return s;
-//}
-//
-//#endif // SUPPORT_LINKS
-// **************** NanaZip Modification End ****************
 
 struct CLinkLevelsInfo
 {
   bool IsAbsolute;
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.01.
   bool ParentDirDots_after_NonParent;
-  // **************** NanaZip Modification End ****************
   int LowLevel;
   int FinalLevel;
 
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.00.
   void Parse(const UString &path, bool isWSL);
-  // **************** NanaZip Modification End ****************
 };
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 void CLinkLevelsInfo::Parse(const UString &path, bool isWSL)
 {
   IsAbsolute = isWSL ?
@@ -738,16 +653,13 @@ void CLinkLevelsInfo::Parse(const UString &path, bool isWSL)
       NName::IsAbsolutePath(path);
   LowLevel = 0;
   FinalLevel = 0;
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.01.
   ParentDirDots_after_NonParent = false;
   bool nonParentDir = false;
-  // **************** NanaZip Modification End ****************
 
   UStringVector parts;
   SplitPathToParts(path, parts);
   int level = 0;
-
+  
   FOR_VECTOR (i, parts)
   {
     const UString &s = parts[i];
@@ -761,28 +673,22 @@ void CLinkLevelsInfo::Parse(const UString &path, bool isWSL)
       continue;
     if (s.IsEqualTo(".."))
     {
-      // **************** NanaZip Modification Start ****************
-      // Backported from 25.01.
       if (IsAbsolute || nonParentDir)
         ParentDirDots_after_NonParent = true;
-      // **************** NanaZip Modification End ****************
       level--;
       if (LowLevel > level)
-        LowLevel = level;
+          LowLevel = level;
     }
     else
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.01.
-    //level++;
     {
       nonParentDir = true;
       level++;
     }
-    // **************** NanaZip Modification End ****************
   }
-
+  
   FinalLevel = level;
 }
+
 
 static bool IsSafePath(const UString &path, bool isWSL)
 {
@@ -798,7 +704,6 @@ bool IsSafePath(const UString &path)
 {
   return IsSafePath(path, false); // isWSL
 }
-// **************** NanaZip Modification End ****************
 
 bool CensorNode_CheckPath2(const NWildcard::CCensorNode &node, const CReadArcItem &item, bool &include);
 bool CensorNode_CheckPath2(const NWildcard::CCensorNode &node, const CReadArcItem &item, bool &include)
@@ -810,28 +715,28 @@ bool CensorNode_CheckPath2(const NWildcard::CCensorNode &node, const CReadArcIte
   {
     if (!include)
       return true;
-
+    
     #ifdef SUPPORT_ALT_STREAMS
     if (!item.IsAltStream)
       return true;
     #endif
-
+    
     found = true;
   }
-
+  
   #ifdef SUPPORT_ALT_STREAMS
 
   if (!item.IsAltStream)
     return false;
-
+  
   UStringVector pathParts2 = item.PathParts;
   if (pathParts2.IsEmpty())
     pathParts2.AddNew();
   UString &back = pathParts2.Back();
-  back += ':';
+  back.Add_Colon();
   back += item.AltStreamName;
   bool include2;
-
+  
   if (node.CheckPathVect(pathParts2,
       true, // isFile,
       include2))
@@ -888,32 +793,30 @@ HRESULT CArchiveExtractCallback::MyCopyFile(ISequentialOutStream *outStream)
   CTempMidBuffer buf(kBufSize);
   if (!buf.Buf)
     return E_OUTOFMEMORY;
-
+  
   NIO::CInFile inFile;
   NIO::COutFile outFile;
-
-  if (!inFile.Open(_CopyFile_Path))
-    return SendMessageError_with_LastError("Open error", _CopyFile_Path);
-
+  
+  if (!inFile.Open(_copyFile_Path))
+    return SendMessageError_with_LastError("Open error", _copyFile_Path);
+    
   for (;;)
   {
     UInt32 num;
-
+    
     if (!inFile.Read(buf.Buf, kBufSize, num))
-      return SendMessageError_with_LastError("Read error", _CopyFile_Path);
-
+      return SendMessageError_with_LastError("Read error", _copyFile_Path);
+      
     if (num == 0)
       return S_OK;
-
-
+      
+      
     RINOK(WriteStream(outStream, buf.Buf, num));
   }
 }
 */
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00, modified for NanaZip.
 HRESULT CArchiveExtractCallback::ReadLink()
 {
   IInArchive * const archive = _arc->Archive;
@@ -998,7 +901,7 @@ HRESULT CArchiveExtractCallback::ReadLink()
     // _link.LinkPath = "\\??\\r:\\1\\2"; // for debug
     // rar5+ returns kpidSymLink absolute link path with "\??\" prefix.
     // we normalize such prefix:
-    if (_link.LinkPath.IsPrefixedBy_Ascii_NoCase(STRING_PATH_SEPARATOR "??" STRING_PATH_SEPARATOR))
+    if (_link.LinkPath.IsPrefixedBy(STRING_PATH_SEPARATOR "??" STRING_PATH_SEPARATOR))
     {
       _link.isRelative = false;
        // we normalize prefix from "\??\" to "\\?\":
@@ -1025,28 +928,22 @@ HRESULT CArchiveExtractCallback::ReadLink()
   _link.Normalize_to_RelativeSafe(_removePathParts);
   return S_OK;
 }
-// **************** NanaZip Modification End ****************
 
 #endif // SUPPORT_LINKS
 
 
 #ifndef _WIN32
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
-//static HRESULT GetOwner(IInArchive *archive,
-//    UInt32 index, UInt32 pidName, UInt32 pidId, COwnerInfo &res)
 static HRESULT GetOwner(IInArchive *archive,
     UInt32 index, UInt32 pidName, UInt32 pidId, CProcessedFileInfo::COwnerInfo &res)
-// **************** NanaZip Modification End ****************
 {
   {
     NWindows::NCOM::CPropVariant prop;
-    RINOK(archive->GetProperty(index, pidId, &prop));
+    RINOK(archive->GetProperty(index, pidId, &prop))
     if (prop.vt == VT_UI4)
     {
       res.Id_Defined = true;
-      res.Id = prop.ulVal; // for debug
+      res.Id = prop.ulVal;
       // res.Id++; // for debug
       // if (pidId == kpidGroupId) res.Id += 7; // for debug
       // res.Id = 0; // for debug
@@ -1056,7 +953,7 @@ static HRESULT GetOwner(IInArchive *archive,
   }
   {
     NWindows::NCOM::CPropVariant prop;
-    RINOK(archive->GetProperty(index, pidName, &prop));
+    RINOK(archive->GetProperty(index, pidName, &prop))
     if (prop.vt == VT_BSTR)
     {
       const UString s = prop.bstrVal;
@@ -1078,7 +975,7 @@ static HRESULT GetOwner(IInArchive *archive,
 
 HRESULT CArchiveExtractCallback::Read_fi_Props()
 {
-  IInArchive *archive = _arc->Archive;
+  IInArchive * const archive = _arc->Archive;
   const UInt32 index = _index;
 
   _fi.Attrib_Defined = false;
@@ -1090,7 +987,7 @@ HRESULT CArchiveExtractCallback::Read_fi_Props()
 
   {
     NCOM::CPropVariant prop;
-    RINOK(archive->GetProperty(index, kpidPosixAttrib, &prop));
+    RINOK(archive->GetProperty(index, kpidPosixAttrib, &prop))
     if (prop.vt == VT_UI4)
     {
       _fi.SetFromPosixAttrib(prop.ulVal);
@@ -1098,10 +995,10 @@ HRESULT CArchiveExtractCallback::Read_fi_Props()
     else if (prop.vt != VT_EMPTY)
       return E_FAIL;
   }
-
+  
   {
     NCOM::CPropVariant prop;
-    RINOK(archive->GetProperty(index, kpidAttrib, &prop));
+    RINOK(archive->GetProperty(index, kpidAttrib, &prop))
     if (prop.vt == VT_UI4)
     {
       _fi.Attrib = prop.ulVal;
@@ -1111,9 +1008,9 @@ HRESULT CArchiveExtractCallback::Read_fi_Props()
       return E_FAIL;
   }
 
-  RINOK(GetTime(index, kpidCTime, _fi.CTime));
-  RINOK(GetTime(index, kpidATime, _fi.ATime));
-  RINOK(GetTime(index, kpidMTime, _fi.MTime));
+  RINOK(GetTime(index, kpidCTime, _fi.CTime))
+  RINOK(GetTime(index, kpidATime, _fi.ATime))
+  RINOK(GetTime(index, kpidMTime, _fi.MTime))
 
  #ifndef _WIN32
   if (_ntOptions.ExtractOwner)
@@ -1139,15 +1036,15 @@ void CArchiveExtractCallback::CorrectPathParts()
       || !(_removePartsForAltStreams || _pathMode == NExtract::NPathMode::kNoPathsAlt))
   #endif
     Correct_FsPath(_pathMode == NExtract::NPathMode::kAbsPaths, _keepAndReplaceEmptyDirPrefixes, pathParts, _item.MainIsDir);
-
+  
   #ifdef SUPPORT_ALT_STREAMS
-
+    
   if (_item.IsAltStream)
   {
     UString s (_item.AltStreamName);
     Correct_AltStream_Name(s);
     bool needColon = true;
-
+    
     if (pathParts.IsEmpty())
     {
       pathParts.AddNew();
@@ -1159,19 +1056,17 @@ void CArchiveExtractCallback::CorrectPathParts()
         NWildcard::GetNumPrefixParts_if_DrivePath(pathParts) == pathParts.Size())
       pathParts.AddNew();
     #endif
-
+    
     UString &name = pathParts.Back();
     if (needColon)
-      name += (char)(_ntOptions.ReplaceColonForAltStream ? '_' : ':');
+      name.Add_Char((char)(_ntOptions.ReplaceColonForAltStream ? '_' : ':'));
     name += s;
   }
-
+    
   #endif // SUPPORT_ALT_STREAMS
 }
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 static void GetFiTimesCAM(const CProcessedFileInfo &fi, CFiTimesCAM &pt, const CArc &arc)
 {
   pt.CTime_Defined = false;
@@ -1204,11 +1099,8 @@ static void GetFiTimesCAM(const CProcessedFileInfo &fi, CFiTimesCAM &pt, const C
     pt.ATime_Defined = true;
   }
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 void CArchiveExtractCallback::CreateFolders()
 {
   // 21.04 : we don't change original (_item.PathParts) here
@@ -1235,7 +1127,7 @@ void CArchiveExtractCallback::CreateFolders()
     }
     // else is_DirOp = true;
   }
-
+    
   if (pathParts.IsEmpty())
   {
     /* if (_some_pathParts_wereRemoved && Is_elimPrefix_Mode),
@@ -1267,7 +1159,7 @@ void CArchiveExtractCallback::CreateFolders()
         ))
   }
   */
-
+  
   if (!_item.IsDir)
     return;
   if (fullPathNew.IsEmpty())
@@ -1278,7 +1170,7 @@ void CArchiveExtractCallback::CreateFolders()
 
   CDirPathTime pt;
   GetFiTimesCAM(_fi, pt, *_arc);
-
+ 
   if (pt.IsSomeTimeDefined())
   {
     pt.Path = fullPathNew;
@@ -1286,7 +1178,6 @@ void CArchiveExtractCallback::CreateFolders()
     _extractedFolders.Add(pt);
   }
 }
-// **************** NanaZip Modification End ****************
 
 
 
@@ -1306,12 +1197,12 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
   {
     if (_overwriteMode == NExtract::NOverwriteMode::kSkip)
       return S_OK;
-
+    
     if (_overwriteMode == NExtract::NOverwriteMode::kAsk)
     {
       const int slashPos = fullProcessedPath.ReverseFind_PathSepar();
       const FString realFullProcessedPath = fullProcessedPath.Left((unsigned)(slashPos + 1)) + fileInfo.Name;
-
+  
       /* (fileInfo) can be symbolic link.
          we can show final file properties here. */
 
@@ -1322,9 +1213,9 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
       RINOK(_extractCallback2->AskOverwrite(
           fs2us(realFullProcessedPath), &ft1, &fileInfo.Size, _item.Path,
           _fi.MTime.Def ? &_fi.MTime.FT : NULL,
-          _curSizeDefined ? &_curSize : NULL,
+          _curSize_Defined ? &_curSize : NULL,
           &overwriteResult))
-
+          
       switch (overwriteResult)
       {
         case NOverwriteAnswer::kCancel:
@@ -1334,7 +1225,7 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
         case NOverwriteAnswer::kNoToAll:
           _overwriteMode = NExtract::NOverwriteMode::kSkip;
           return S_OK;
-
+    
         case NOverwriteAnswer::kYes:
           break;
         case NOverwriteAnswer::kYesToAll:
@@ -1352,7 +1243,7 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
     {
       if (!AutoRenamePath(fullProcessedPath))
       {
-        RINOK(SendMessageError(kCantAutoRename, fullProcessedPath));
+        RINOK(SendMessageError(kCantAutoRename, fullProcessedPath))
         return E_FAIL;
       }
       _isRenamed = true;
@@ -1362,14 +1253,13 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
       FString existPath (fullProcessedPath);
       if (!AutoRenamePath(existPath))
       {
-        RINOK(SendMessageError(kCantAutoRename, fullProcessedPath));
+        RINOK(SendMessageError(kCantAutoRename, fullProcessedPath))
         return E_FAIL;
       }
       // MyMoveFile can rename folders. So it's OK to use it for folders too
       if (!MyMoveFile(fullProcessedPath, existPath))
       {
-        HRESULT errorCode = GetLastError_noZero_HRESULT();
-        RINOK(SendMessageError2(errorCode, kCantRenameFile, existPath, fullProcessedPath));
+        RINOK(SendMessageError2_with_LastError(kCantRenameFile, existPath, fullProcessedPath))
         return E_FAIL;
       }
     }
@@ -1380,7 +1270,7 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
         // do we need to delete all files in folder?
         if (!RemoveDir(fullProcessedPath))
         {
-          RINOK(SendMessageError_with_LastError(kCantDeleteOutputDir, fullProcessedPath));
+          RINOK(SendMessageError_with_LastError(kCantDeleteOutputDir, fullProcessedPath))
           return S_OK;
         }
       }
@@ -1390,7 +1280,7 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
           if (!DeleteFileAlways(fullProcessedPath))
             if (GetLastError() != ERROR_FILE_NOT_FOUND) // check it in linux
             {
-              RINOK(SendMessageError_with_LastError(kCantDeleteOutputFile, fullProcessedPath));
+              RINOK(SendMessageError_with_LastError(kCantDeleteOutputFile, fullProcessedPath))
               return S_OK;
               // return E_FAIL;
             }
@@ -1401,7 +1291,7 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
   {
     #if defined(_WIN32) && !defined(UNDER_CE)
     // we need to clear READ-ONLY of parent before creating alt stream
-    int colonPos = NName::FindAltStreamColon(fullProcessedPath);
+    const int colonPos = NName::FindAltStreamColon(fullProcessedPath);
     if (colonPos >= 0 && fullProcessedPath[(unsigned)colonPos + 1] != 0)
     {
       FString parentFsPath (fullProcessedPath);
@@ -1410,45 +1300,51 @@ HRESULT CArchiveExtractCallback::CheckExistFile(FString &fullProcessedPath, bool
       if (parentFi.Find(parentFsPath))
       {
         if (parentFi.IsReadOnly())
+        {
+          _altStream_NeedRestore_Attrib_for_parentFsPath = parentFsPath;
+          _altStream_NeedRestore_AttribVal = parentFi.Attrib;
           SetFileAttrib(parentFsPath, parentFi.Attrib & ~(DWORD)FILE_ATTRIBUTE_READONLY);
+        }
       }
     }
     #endif // defined(_WIN32) && !defined(UNDER_CE)
   }
-
+  
   needExit = false;
   return S_OK;
 }
 
 
 
-
-
-
+/*
+return:
+  needExit = false: caller will     use (outStreamLoc) and _hashStreamSpec
+  needExit = true : caller will not use (outStreamLoc) and _hashStreamSpec.
+*/
 HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream> &outStreamLoc, bool &needExit)
 {
   needExit = true;
-
-  RINOK(Read_fi_Props());
+    
+  RINOK(Read_fi_Props())
 
   #ifdef SUPPORT_LINKS
-  IInArchive *archive = _arc->Archive;
+  IInArchive * const archive = _arc->Archive;
   #endif
 
   const UInt32 index = _index;
 
   bool isAnti = false;
-  RINOK(_arc->IsItem_Anti(index, isAnti));
+  RINOK(_arc->IsItem_Anti(index, isAnti))
 
   CorrectPathParts();
   UString processedPath (MakePathFromParts(_item.PathParts));
-
+  
   if (!isAnti)
   {
     // 21.04: CreateFolders doesn't change (_item.PathParts)
     CreateFolders();
   }
-
+  
   FString fullProcessedPath (us2fs(processedPath));
   if (_pathMode != NExtract::NPathMode::kAbsPaths
       || !NName::IsAbsolutePath(processedPath))
@@ -1464,7 +1360,7 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
     {
       const CIndexToPathPair &pair = _renamedFiles[(unsigned)renIndex];
       fullProcessedPath = pair.Path;
-      fullProcessedPath += ':';
+      fullProcessedPath.Add_Colon();
       UString s (_item.AltStreamName);
       Correct_AltStream_Name(s);
       fullProcessedPath += us2fs(s);
@@ -1478,11 +1374,7 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
     if (isAnti)
       RemoveDir(_diskFilePath);
     #ifdef SUPPORT_LINKS
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.00.
-    //if (_link.linkPath.IsEmpty())
     if (_link.LinkPath.IsEmpty())
-    // **************** NanaZip Modification End ****************
     #endif
     {
       if (!isAnti)
@@ -1492,14 +1384,14 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
   }
   else if (!_isSplit)
   {
-    RINOK(CheckExistFile(fullProcessedPath, needExit));
+    RINOK(CheckExistFile(fullProcessedPath, needExit))
     if (needExit)
       return S_OK;
     needExit = true;
   }
-
+  
   _diskFilePath = fullProcessedPath;
-
+    
 
   if (isAnti)
   {
@@ -1510,16 +1402,12 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
   // not anti
 
   #ifdef SUPPORT_LINKS
-
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.01.
-  //if (!_link.linkPath.IsEmpty())
+  
   if (!_link.LinkPath.IsEmpty())
   {
     #ifndef UNDER_CE
     {
       bool linkWasSet = false;
-      //RINOK(SetFromLinkPath(fullProcessedPath, _link, linkWasSet));
       RINOK(SetLink(fullProcessedPath, _link, linkWasSet))
 /*
       // we don't set attributes for placeholder.
@@ -1533,19 +1421,18 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
     }
     #endif // UNDER_CE
 
-    // if (_CopyFile_Path.IsEmpty())
+    // if (_copyFile_Path.IsEmpty())
     {
       needExit = false;
       return S_OK;
     }
   }
-  // **************** NanaZip Modification End ****************
 
-  if (!_hardLinks.IDs.IsEmpty() && !_item.IsAltStream)
+  if (!_hardLinks.IDs.IsEmpty() && !_item.IsAltStream && !_item.IsDir)
   {
     CHardLinkNode h;
     bool defined;
-    RINOK(Archive_Get_HardLinkNode(archive, index, h, defined));
+    RINOK(Archive_Get_HardLinkNode(archive, index, h, defined))
     if (defined)
     {
       const int linkIndex = _hardLinks.IDs.FindInSorted2(h);
@@ -1556,8 +1443,6 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
           hl = fullProcessedPath;
         else
         {
-          // **************** NanaZip Modification Start ****************
-          // Backported from 25.01.
           bool link_was_Created = false;
           RINOK(CreateHardLink2(fullProcessedPath, hl, link_was_Created))
           if (!link_was_Created)
@@ -1571,38 +1456,33 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
           */
           needExit = false;
           return S_OK;
-          // **************** NanaZip Modification End ****************
         }
       }
     }
   }
-
+  
   #endif // SUPPORT_LINKS
 
 
   // ---------- CREATE WRITE FILE -----
 
   _outFileStreamSpec = new COutFileStream;
-  CMyComPtr<ISequentialOutStream> outFileStream_Loc(_outFileStreamSpec);
-
-  if (!_outFileStreamSpec->Open(fullProcessedPath, _isSplit ? OPEN_ALWAYS: CREATE_ALWAYS))
+  CMyComPtr<IOutStream> outFileStream_Loc(_outFileStreamSpec);
+  
+  if (!_outFileStreamSpec->Create_ALWAYS_or_Open_ALWAYS(fullProcessedPath, !_isSplit))
   {
     // if (::GetLastError() != ERROR_FILE_EXISTS || !isSplit)
     {
-      RINOK(SendMessageError_with_LastError(kCantOpenOutFile, fullProcessedPath));
+      RINOK(SendMessageError_with_LastError(kCantOpenOutFile, fullProcessedPath))
       return S_OK;
     }
   }
-
+  
   _needSetAttrib = true;
 
   bool is_SymLink_in_Data = false;
 
-  // **************** NanaZip Modification Start ****************
-// Backported from 25.00, modified for NanaZip.
-  //if (_curSizeDefined && _curSize > 0 && _curSize < (1 << 12))
-  if (_curSizeDefined && _curSize && _curSize < k_LinkDataSize_LIMIT)
-  // **************** NanaZip Modification End ****************
+  if (_curSize_Defined && _curSize && _curSize < k_LinkDataSize_LIMIT)
   {
     if (_fi.IsLinuxSymLink())
     {
@@ -1624,29 +1504,29 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
     _bufPtrSeqOutStream_Spec->Init(_outMemBuf, _outMemBuf.Size());
     outStreamLoc = _bufPtrSeqOutStream;
   }
-  else // not reprase
+  else // not reparse
   {
-    if (_ntOptions.PreAllocateOutFile && !_isSplit && _curSizeDefined && _curSize > (1 << 12))
+    if (_ntOptions.PreAllocateOutFile && !_isSplit && _curSize_Defined && _curSize > (1 << 12))
     {
       // UInt64 ticks = GetCpuTicks();
       _fileLength_that_WasSet = _curSize;
       bool res = _outFileStreamSpec->File.SetLength(_curSize);
-      _fileLengthWasSet = res;
-
+      _fileLength_WasSet = res;
+      
       // ticks = GetCpuTicks() - ticks;
       // printf("\nticks = %10d\n", (unsigned)ticks);
       if (!res)
       {
-        RINOK(SendMessageError_with_LastError(kCantSetFileLen, fullProcessedPath));
+        RINOK(SendMessageError_with_LastError(kCantSetFileLen, fullProcessedPath))
       }
-
+      
       /*
       _outFileStreamSpec->File.Close();
       ticks = GetCpuTicks() - ticks;
       printf("\nticks = %10d\n", (unsigned)ticks);
       return S_FALSE;
       */
-
+      
       /*
       File.SetLength() on FAT (xp64): is fast, but then File.Close() can be slow,
       if we don't write any data.
@@ -1655,14 +1535,14 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
       while remote file still can grow.
       We need some way to detect such bad cases and disable PreAllocateOutFile mode.
       */
-
+      
       res = _outFileStreamSpec->SeekToBegin_bool();
       if (!res)
       {
-        RINOK(SendMessageError_with_LastError("Cannot seek to begin of file", fullProcessedPath));
+        RINOK(SendMessageError_with_LastError("Cannot seek to begin of file", fullProcessedPath))
       }
     } // PreAllocateOutFile
-
+    
     #ifdef SUPPORT_ALT_STREAMS
     if (_isRenamed && !_item.IsAltStream)
     {
@@ -1673,16 +1553,16 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
         _renamedFiles[insertIndex].Path = fullProcessedPath;
     }
     #endif // SUPPORT_ALT_STREAMS
-
+    
     if (_isSplit)
     {
-      RINOK(_outFileStreamSpec->Seek((Int64)_position, STREAM_SEEK_SET, NULL));
+      RINOK(outFileStream_Loc->Seek((Int64)_position, STREAM_SEEK_SET, NULL))
     }
     outStreamLoc = outFileStream_Loc;
-  } // if not reprase
+  } // if not reparse
 
   _outFileStream = outFileStream_Loc;
-
+      
   needExit = false;
   return S_OK;
 }
@@ -1691,7 +1571,7 @@ HRESULT CArchiveExtractCallback::GetExtractStream(CMyComPtr<ISequentialOutStream
 
 HRESULT CArchiveExtractCallback::GetItem(UInt32 index)
 {
-  #ifndef _SFX
+  #ifndef Z7_SFX
   _item._use_baseParentFolder_mode = _use_baseParentFolder_mode;
   if (_use_baseParentFolder_mode)
   {
@@ -1700,7 +1580,7 @@ HRESULT CArchiveExtractCallback::GetItem(UInt32 index)
         _pathMode == NExtract::NPathMode::kAbsPaths)
       _item._baseParentFolder = -1;
   }
-  #endif // _SFX
+  #endif // Z7_SFX
 
   #ifdef SUPPORT_ALT_STREAMS
   _item.WriteToAltStreamIfColon = _ntOptions.WriteToAltStreamIfColon;
@@ -1710,13 +1590,13 @@ HRESULT CArchiveExtractCallback::GetItem(UInt32 index)
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStream **outStream, Int32 askExtractMode)
+Z7_COM7F_IMF(CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStream **outStream, Int32 askExtractMode))
 {
   COM_TRY_BEGIN
 
   *outStream = NULL;
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
   if (_hashStream)
     _hashStreamSpec->ReleaseStream();
   _hashStreamWasUsed = false;
@@ -1726,40 +1606,36 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
   _bufPtrSeqOutStream.Release();
 
   _encrypted = false;
-  _position = 0;
   _isSplit = false;
-
-  _curSize = 0;
-  _curSizeDefined = false;
-  _fileLengthWasSet = false;
-  _fileLength_that_WasSet = 0;
-  _index = index;
-
-  _diskFilePath.Empty();
-
+  _curSize_Defined = false;
+  _fileLength_WasSet = false;
   _isRenamed = false;
-
   // _fi.Clear();
-
-  // _is_SymLink_in_Data = false;
+  _extractMode = false;
   _is_SymLink_in_Data_Linux = false;
-
   _needSetAttrib = false;
   _isSymLinkCreated = false;
   _itemFailure = false;
-
-  // **************** NanaZip Modification Start ****************
-  // Backported from 24.05.
   _some_pathParts_wereRemoved = false;
   // _op_WasReported = false;
-  // **************** NanaZip Modification End ****************
+
+  _position = 0;
+  _curSize = 0;
+  _fileLength_that_WasSet = 0;
+  _index = index;
+
+#if defined(_WIN32) && !defined(UNDER_CE)
+  _altStream_NeedRestore_AttribVal = 0;
+  _altStream_NeedRestore_Attrib_for_parentFsPath.Empty();
+#endif
+
+  _diskFilePath.Empty();
 
   #ifdef SUPPORT_LINKS
-  // _CopyFile_Path.Empty();
+  // _copyFile_Path.Empty();
   _link.Clear();
   #endif
 
-  _extractMode = false;
 
   switch (askExtractMode)
   {
@@ -1771,16 +1647,17 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
       else
         _extractMode = true;
       break;
-  };
+    default: break;
+  }
 
 
-  IInArchive *archive = _arc->Archive;
+  IInArchive * const archive = _arc->Archive;
 
-  RINOK(GetItem(index));
+  RINOK(GetItem(index))
 
   {
     NCOM::CPropVariant prop;
-    RINOK(archive->GetProperty(index, kpidPosition, &prop));
+    RINOK(archive->GetProperty(index, kpidPosition, &prop))
     if (prop.vt != VT_EMPTY)
     {
       if (prop.vt != VT_UI8)
@@ -1790,14 +1667,13 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
     }
   }
 
-  #ifdef SUPPORT_LINKS
-  RINOK(ReadLink());
-  #endif // SUPPORT_LINKS
+#ifdef SUPPORT_LINKS
+  RINOK(ReadLink())
+#endif
+  
+  RINOK(Archive_GetItemBoolProp(archive, index, kpidEncrypted, _encrypted))
 
-
-  RINOK(Archive_GetItemBoolProp(archive, index, kpidEncrypted, _encrypted));
-
-  RINOK(GetUnpackSize());
+  RINOK(GetUnpackSize())
 
   #ifdef SUPPORT_ALT_STREAMS
   if (!_ntOptions.AltStreams.Val && _item.IsAltStream)
@@ -1813,13 +1689,26 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
       return S_OK;
   }
 
-  #ifndef _SFX
+#if defined(_WIN32) && !defined(UNDER_CE) && !defined(Z7_SFX)
+  if (askExtractMode == NArchive::NExtract::NAskMode::kExtract
+      && !_testMode
+      && _item.IsAltStream
+      && ZoneBuf.Size() != 0
+      && Is_ZoneId_StreamName(_item.AltStreamName))
+    if (ZoneMode != NExtract::NZoneIdMode::kOffice
+        || _item.PathParts.IsEmpty()
+        || FindExt2(kOfficeExtensions, _item.PathParts.Back()))
+      return S_OK;
+#endif
+
+
+  #ifndef Z7_SFX
   if (_use_baseParentFolder_mode)
   {
     if (!pathParts.IsEmpty())
     {
       unsigned numRemovePathParts = 0;
-
+      
       #ifdef SUPPORT_ALT_STREAMS
       if (_pathMode == NExtract::NPathMode::kNoPathsAlt && _item.IsAltStream)
         numRemovePathParts = pathParts.Size();
@@ -1832,7 +1721,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
     }
   }
   else
-  #endif // _SFX
+  #endif // Z7_SFX
   {
     if (pathParts.IsEmpty())
     {
@@ -1847,8 +1736,8 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
     }
 
     unsigned numRemovePathParts = 0;
-
-    switch (_pathMode)
+    
+    switch ((int)_pathMode)
     {
       case NExtract::NPathMode::kFullPaths:
       case NExtract::NPathMode::kCurPaths:
@@ -1856,7 +1745,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
         if (_removePathParts.IsEmpty())
           break;
         bool badPrefix = false;
-
+        
         if (pathParts.Size() < _removePathParts.Size())
           badPrefix = true;
         else
@@ -1876,7 +1765,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
                 badPrefix = true;
             }
           }
-
+          
           if (!badPrefix)
           FOR_VECTOR (i, _removePathParts)
           {
@@ -1887,24 +1776,20 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
             }
           }
         }
-
+        
         if (badPrefix)
         {
           if (askExtractMode == NArchive::NExtract::NAskMode::kExtract && !_testMode)
             return E_FAIL;
         }
         else
-        // **************** NanaZip Modification Start ****************
-        // Backported from 24.05.
-        //numRemovePathParts = _removePathParts.Size();
         {
           numRemovePathParts = _removePathParts.Size();
           _some_pathParts_wereRemoved = true;
         }
-        // **************** NanaZip Modification End ****************
         break;
       }
-
+      
       case NExtract::NPathMode::kNoPaths:
       {
         if (!pathParts.IsEmpty())
@@ -1922,37 +1807,29 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
           numRemovePathParts = pathParts.Size() - 1;
         break;
       }
-      /*
-      case NExtract::NPathMode::kFullPaths:
       case NExtract::NPathMode::kAbsPaths:
-        break;
-      */
       default:
         break;
     }
-
+    
     pathParts.DeleteFrontal(numRemovePathParts);
   }
 
-
-  #ifndef _SFX
+  
+  #ifndef Z7_SFX
 
   if (ExtractToStreamCallback)
   {
-    if (!GetProp)
-    {
-      GetProp_Spec = new CGetProp;
-      GetProp = GetProp_Spec;
-    }
-    GetProp_Spec->Arc = _arc;
-    GetProp_Spec->IndexInArc = index;
+    CMyComPtr2_Create<IGetProp, CGetProp> GetProp;
+    GetProp->Arc = _arc;
+    GetProp->IndexInArc = index;
     UString name (MakePathFromParts(pathParts));
-
+    // GetProp->BaseName = name;
     #ifdef SUPPORT_ALT_STREAMS
     if (_item.IsAltStream)
     {
       if (!pathParts.IsEmpty() || (!_removePartsForAltStreams && _pathMode != NExtract::NPathMode::kNoPathsAlt))
-        name += ':';
+        name.Add_Colon();
       name += _item.AltStreamName;
     }
     #endif
@@ -1960,7 +1837,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
     return ExtractToStreamCallback->GetStream7(name, BoolToInt(_item.IsDir), outStream, askExtractMode, GetProp);
   }
 
-  #endif // _SFX
+  #endif // Z7_SFX
 
 
   CMyComPtr<ISequentialOutStream> outStreamLoc;
@@ -1972,13 +1849,13 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
     else
     {
       bool needExit = true;
-      RINOK(GetExtractStream(outStreamLoc, needExit));
+      RINOK(GetExtractStream(outStreamLoc, needExit))
       if (needExit)
         return S_OK;
     }
   }
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
   if (_hashStream)
   {
     if (askExtractMode == NArchive::NExtract::NAskMode::kExtract ||
@@ -1990,13 +1867,13 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
       _hashStreamWasUsed = true;
     }
   }
-  #endif // _SFX
+  #endif // Z7_SFX
 
   if (outStreamLoc)
   {
     /*
     #ifdef SUPPORT_LINKS
-    if (!_CopyFile_Path.IsEmpty())
+    if (!_copyFile_Path.IsEmpty())
     {
       RINOK(PrepareOperation(askExtractMode));
       RINOK(MyCopyFile(outStreamLoc));
@@ -2008,7 +1885,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
     */
     *outStream = outStreamLoc.Detach();
   }
-
+  
   return S_OK;
 
   COM_TRY_END
@@ -2024,17 +1901,18 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStre
 
 
 
-STDMETHODIMP CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode)
+Z7_COM7F_IMF(CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode))
 {
   COM_TRY_BEGIN
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
+  // if (!_op_WasReported)
   if (ExtractToStreamCallback)
     return ExtractToStreamCallback->PrepareOperation7(askExtractMode);
   #endif
-
+  
   _extractMode = false;
-
+  
   switch (askExtractMode)
   {
     case NArchive::NExtract::NAskMode::kExtract:
@@ -2043,11 +1921,14 @@ STDMETHODIMP CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode)
       else
         _extractMode = true;
       break;
-  };
+    default: break;
+  }
 
+  // if (_op_WasReported) return S_OK;
+  
   return _extractCallback2->PrepareOperation(_item.Path, BoolToInt(_item.IsDir),
-      askExtractMode, _isSplit ? &_position: 0);
-
+      askExtractMode, _isSplit ? &_position: NULL);
+  
   COM_TRY_END
 }
 
@@ -2059,40 +1940,35 @@ HRESULT CArchiveExtractCallback::CloseFile()
 {
   if (!_outFileStream)
     return S_OK;
-
+  
   HRESULT hres = S_OK;
-
+  
   const UInt64 processedSize = _outFileStreamSpec->ProcessedSize;
-  if (_fileLengthWasSet && _fileLength_that_WasSet > processedSize)
+  if (_fileLength_WasSet && _fileLength_that_WasSet > processedSize)
   {
-    bool res = _outFileStreamSpec->File.SetLength(processedSize);
-    _fileLengthWasSet = res;
+    const bool res = _outFileStreamSpec->File.SetLength(processedSize);
+    _fileLength_WasSet = res;
     if (!res)
     {
-      HRESULT hres2 = SendMessageError_with_LastError(kCantSetFileLen, us2fs(_item.Path));
+      const HRESULT hres2 = SendMessageError_with_LastError(kCantSetFileLen, us2fs(_item.Path));
       if (hres == S_OK)
         hres = hres2;
     }
   }
 
   _curSize = processedSize;
-  _curSizeDefined = true;
+  _curSize_Defined = true;
 
- #if defined(_WIN32) && !defined(UNDER_CE) && !defined(_SFX)
+ #if defined(_WIN32) && !defined(UNDER_CE) && !defined(Z7_SFX)
   if (ZoneBuf.Size() != 0
       && !_item.IsAltStream)
   {
     // if (NFind::DoesFileExist_Raw(tempFilePath))
     if (ZoneMode != NExtract::NZoneIdMode::kOffice ||
-        FindExt2(kOfficeExtensions, _diskFilePath))
+        FindExt2(kOfficeExtensions, fs2us(_diskFilePath)))
     {
       // we must write zone file before setting of timestamps
-      // **************** NanaZip Modification Start ****************
-      // Backported from 24.05.
-      //const FString path = _diskFilePath + k_ZoneId_StreamName;
-      //if (!WriteZoneFile(path, ZoneBuf))
       if (!WriteZoneFile_To_BaseFile(_diskFilePath, ZoneBuf))
-      // **************** NanaZip Modification End ****************
       {
         // we can't write it in FAT
         // SendMessageError_with_LastError("Can't write Zone.Identifier stream", path);
@@ -2102,11 +1978,7 @@ HRESULT CArchiveExtractCallback::CloseFile()
  #endif
 
   CFiTimesCAM t;
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.01.
-  //GetFiTimesCAM(t);
   GetFiTimesCAM(_fi, t, *_arc);
-  // **************** NanaZip Modification End ****************
 
   // #ifdef _WIN32
   if (t.IsSomeTimeDefined())
@@ -2116,19 +1988,23 @@ HRESULT CArchiveExtractCallback::CloseFile()
         t.MTime_Defined ? &t.MTime : NULL);
   // #endif
 
-  RINOK(_outFileStreamSpec->Close());
+  RINOK(_outFileStreamSpec->Close())
   _outFileStream.Release();
+
+#if defined(_WIN32) && !defined(UNDER_CE)
+  if (!_altStream_NeedRestore_Attrib_for_parentFsPath.IsEmpty())
+  {
+    SetFileAttrib(_altStream_NeedRestore_Attrib_for_parentFsPath, _altStream_NeedRestore_AttribVal);
+    _altStream_NeedRestore_Attrib_for_parentFsPath.Empty();
+  }
+#endif
+
   return hres;
 }
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01, modified for NanaZip.
-// Due to the sheer diff size, this backport contains multiple individual blocks.
 #ifdef SUPPORT_LINKS
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 static bool CheckLinkPath_in_FS_for_pathParts(const FString &path, const UStringVector &v)
 {
   FString path2 = path;
@@ -2144,10 +2020,7 @@ static bool CheckLinkPath_in_FS_for_pathParts(const FString &path, const UString
   }
   return true;
 }
-// **************** NanaZip Modification End ****************
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 /*
 link.isRelative / relative_item_PathPrefix
    false        / empty
@@ -2175,10 +2048,7 @@ static bool CheckLinkPath_in_FS(
   // we check target paths:
   return CheckLinkPath_in_FS_for_pathParts(path, v);
 }
-// **************** NanaZip Modification End ****************
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 static const unsigned k_DangLevel_MAX_for_Link_over_Link = 9;
 
 HRESULT CArchiveExtractCallback::CreateHardLink2(
@@ -2196,11 +2066,9 @@ HRESULT CArchiveExtractCallback::CreateHardLink2(
   link_was_Created = true;
   return S_OK;
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01, modified for NanaZip.
+
 HRESULT CArchiveExtractCallback::SetLink(
     const FString &fullProcessedPath_from,
     const CLinkInfo &link,
@@ -2220,16 +2088,12 @@ HRESULT CArchiveExtractCallback::SetLink(
   postLink.fullProcessedPath_from = fullProcessedPath_from;
   postLink.LinkInfo = link;
   _postLinks.Add(postLink);
-
+  
   // file doesn't exist in most cases. So we don't check for error.
   DeleteLinkFileAlways_or_RemoveEmptyDir(fullProcessedPath_from, false); // checkThatFileIsEmpty = false
 
   NIO::COutFile outFile;
-  // **************** NanaZip Modification Start ****************
-  // Adapted for NanaZip.
-  //if (!outFile.Create_NEW(fullProcessedPath_from))
-  if (!outFile.Create(fullProcessedPath_from, false))
-  // **************** NanaZip Modification End ****************
+  if (!outFile.Create_NEW(fullProcessedPath_from))
     return SendMessageError("Cannot create temporary link file", fullProcessedPath_from);
 #if 0 // 1 for debug
   // here we can write link path to temporary link file placeholder,
@@ -2241,11 +2105,8 @@ HRESULT CArchiveExtractCallback::SetLink(
   linkWasSet = true;
   return S_OK;
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01, modified for NanaZip.
 // if file/dir is symbolic link it will remove only link itself
 HRESULT CArchiveExtractCallback::DeleteLinkFileAlways_or_RemoveEmptyDir(
     const FString &path, bool checkThatFileIsEmpty) const
@@ -2275,11 +2136,8 @@ HRESULT CArchiveExtractCallback::DeleteLinkFileAlways_or_RemoveEmptyDir(
   }
   return S_OK;
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 /*
 in:
   link.LinkPath : must be relative (non-absolute) path in any case !!!
@@ -2307,7 +2165,7 @@ static HRESULT SetLink2(const CArchiveExtractCallback &callback,
     So if some another extracted file will use this link,
     then number of real path parts (after link redirection) cannot be
     smaller than number of requested path parts from archive records.
-
+    
     here we check only (link.LinkPath) without (_item.PathParts).
     */
     CLinkLevelsInfo li;
@@ -2436,7 +2294,7 @@ static HRESULT SetLink2(const CArchiveExtractCallback &callback,
   const bool isDir = (postLink.item_IsDir || link.LinkType == k_LinkType_Junction);
 #endif
 
-
+ 
 #ifdef _WIN32
   CByteBuffer data;
   // printf("\nFillLinkData(): %s\n", GetOemString(target).Ptr());
@@ -2473,12 +2331,9 @@ static HRESULT SetLink2(const CArchiveExtractCallback &callback,
   linkWasSet = true;
   return S_OK;
 }
-// **************** NanaZip Modification End ****************
 
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 bool CLinkInfo::Parse_from_WindowsReparseData(const Byte *data, size_t dataSize)
 {
   CReparseAttr reparse;
@@ -2516,11 +2371,8 @@ bool CLinkInfo::Parse_from_WindowsReparseData(const Byte *data, size_t dataSize)
   // windows: (LinkPath) doesn't contain linux separator (slash).
   return true;
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 bool CLinkInfo::Parse_from_LinuxData(const Byte *data, size_t dataSize)
 {
   // Clear(); // *this object was cleared by constructor already.
@@ -2543,11 +2395,8 @@ bool CLinkInfo::Parse_from_LinuxData(const Byte *data, size_t dataSize)
   // windows: (LinkPath) doesn't contain linux separator (slash).
   return true;
 }
-// **************** NanaZip Modification End ****************
+    
 
-
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 // in/out:          (LinkPath) uses system path separator
 // in/out: windows: (LinkPath) doesn't contain linux separator (slash).
 // out: (LinkPath) is relative path, and LinkPath[0] is not path separator
@@ -2587,11 +2436,8 @@ void CLinkInfo::Remove_AbsPathPrefixes()
     LinkPath.DeleteFrontal(n);
   }
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 /*
   it removes redundant separators, if there are double separators,
   but it keeps double separators at start of string //name/.
@@ -2621,11 +2467,8 @@ static void RemoveRedundantPathSeparators(UString &path)
   *dest = 0;
   path.ReleaseBuf_SetLen((unsigned)(dest - path.Ptr()));
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 // in/out: (LinkPath) uses system path separator
 // in/out: windows: (LinkPath) doesn't contain linux separator (slash).
 // out: (LinkPath) is relative path, and LinkPath[0] is not path separator
@@ -2664,13 +2507,10 @@ void CLinkInfo::Normalize_to_RelativeSafe(UStringVector &removePathParts)
   LinkPath = MakePathFromParts(pathParts);
   Remove_AbsPathPrefixes();
 }
-// **************** NanaZip Modification End ****************
 
 #endif // SUPPORT_LINKS
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 HRESULT CArchiveExtractCallback::CloseReparseAndFile()
 {
   HRESULT res = S_OK;
@@ -2681,12 +2521,12 @@ HRESULT CArchiveExtractCallback::CloseReparseAndFile()
   bool repraseMode = false;
   bool needSetReparse = false;
   CLinkInfo link;
-
+  
   if (_bufPtrSeqOutStream)
   {
     repraseMode = true;
     reparseSize = _bufPtrSeqOutStream_Spec->GetPos();
-    if (_curSizeDefined && reparseSize == _outMemBuf.Size())
+    if (_curSize_Defined && reparseSize == _outMemBuf.Size())
     {
       /*
       CReparseAttr reparse;
@@ -2732,7 +2572,7 @@ HRESULT CArchiveExtractCallback::CloseReparseAndFile()
   if (repraseMode)
   {
     _curSize = reparseSize;
-    _curSizeDefined = true;
+    _curSize_Defined = true;
     if (needSetReparse)
     {
       // empty file was created so we must delete it.
@@ -2754,18 +2594,15 @@ HRESULT CArchiveExtractCallback::CloseReparseAndFile()
           _isSymLinkCreated = true; // link.IsSymLink();
         else
 */
+          _needSetAttrib = false;
       }
     }
   }
 #endif // SUPPORT_LINKS
   return res;
 }
-// **************** NanaZip Modification End ****************
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 static void SetAttrib_Base(const FString &path, const CProcessedFileInfo &fi,
     const CArchiveExtractCallback &callback)
 {
@@ -2789,11 +2626,8 @@ static void SetAttrib_Base(const FString &path, const CProcessedFileInfo &fi,
     }
   }
 }
-// **************** NanaZip Modification End ****************
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01, modified for NanaZip.
-void CArchiveExtractCallback::SetAttrib()
+void CArchiveExtractCallback::SetAttrib() const
 {
 #ifndef _WIN32
   // Linux now doesn't support permissions for symlinks
@@ -2809,12 +2643,9 @@ void CArchiveExtractCallback::SetAttrib()
 
   SetAttrib_Base(_diskFilePath, _fi, *this);
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01, modified for NanaZip.
-#ifdef _USE_SECURITY_CODE
+#ifdef Z7_USE_SECURITY_CODE
 HRESULT CArchiveExtractCallback::SetSecurityInfo(UInt32 indexInArc, const FString &path) const
 {
   if (!_stdOutMode && _extractMode && _ntOptions.NtSecurity.Val && _arc->GetRawProps)
@@ -2842,17 +2673,16 @@ HRESULT CArchiveExtractCallback::SetSecurityInfo(UInt32 indexInArc, const FStrin
   }
   return S_OK;
 }
-#endif // _USE_SECURITY_CODE
-// **************** NanaZip Modification End ****************
+#endif // Z7_USE_SECURITY_CODE
 
 
-STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 opRes)
+Z7_COM7F_IMF(CArchiveExtractCallback::SetOperationResult(Int32 opRes))
 {
   COM_TRY_BEGIN
 
   // printf("\nCArchiveExtractCallback::SetOperationResult: %d %s\n", opRes, GetAnsiString(_diskFilePath));
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
   if (ExtractToStreamCallback)
   {
     GetUnpackSize();
@@ -2860,7 +2690,7 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 opRes)
   }
   #endif
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
 
   if (_hashStreamWasUsed)
   {
@@ -2872,26 +2702,23 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 opRes)
         #endif
         , _item.Path);
     _curSize = _hashStreamSpec->GetSize();
-    _curSizeDefined = true;
+    _curSize_Defined = true;
     _hashStreamSpec->ReleaseStream();
     _hashStreamWasUsed = false;
   }
 
-  #endif // _SFX
+  #endif // Z7_SFX
 
-  RINOK(CloseReparseAndFile());
-
-  #ifdef _USE_SECURITY_CODE
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.01.
+  RINOK(CloseReparseAndFile())
+  
+#ifdef Z7_USE_SECURITY_CODE
   RINOK(SetSecurityInfo(_index, _diskFilePath))
-  // **************** NanaZip Modification End ****************
-  #endif // _USE_SECURITY_CODE
+#endif
 
-  if (!_curSizeDefined)
+  if (!_curSize_Defined)
     GetUnpackSize();
-
-  if (_curSizeDefined)
+  
+  if (_curSize_Defined)
   {
     #ifdef SUPPORT_ALT_STREAMS
     if (_item.IsAltStream)
@@ -2900,7 +2727,7 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 opRes)
     #endif
       UnpackSize += _curSize;
   }
-
+    
   if (_item.IsDir)
     NumFolders++;
   #ifdef SUPPORT_ALT_STREAMS
@@ -2912,29 +2739,29 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 opRes)
 
   if (_needSetAttrib)
     SetAttrib();
-
-  RINOK(_extractCallback2->SetOperationResult(opRes, BoolToInt(_encrypted)));
-
+  
+  RINOK(_extractCallback2->SetOperationResult(opRes, BoolToInt(_encrypted)))
+  
   return S_OK;
-
+  
   COM_TRY_END
 }
 
 
 
-STDMETHODIMP CArchiveExtractCallback::ReportExtractResult(UInt32 indexType, UInt32 index, Int32 opRes)
+Z7_COM7F_IMF(CArchiveExtractCallback::ReportExtractResult(UInt32 indexType, UInt32 index, Int32 opRes))
 {
   if (_folderArchiveExtractCallback2)
   {
     bool isEncrypted = false;
     UString s;
-
+    
     if (indexType == NArchive::NEventIndexType::kInArcIndex && index != (UInt32)(Int32)-1)
     {
       CReadArcItem item;
-      RINOK(_arc->GetItem(index, item));
+      RINOK(_arc->GetItem(index, item))
       s = item.Path;
-      RINOK(Archive_GetItemBoolProp(_arc->Archive, index, kpidEncrypted, isEncrypted));
+      RINOK(Archive_GetItemBoolProp(_arc->Archive, index, kpidEncrypted, isEncrypted))
     }
     else
     {
@@ -2942,7 +2769,7 @@ STDMETHODIMP CArchiveExtractCallback::ReportExtractResult(UInt32 indexType, UInt
       s.Add_UInt32(index);
       // if (indexType == NArchive::NEventIndexType::kBlockIndex) {}
     }
-
+    
     return _folderArchiveExtractCallback2->ReportExtractResult(opRes, isEncrypted, s);
   }
 
@@ -2950,18 +2777,20 @@ STDMETHODIMP CArchiveExtractCallback::ReportExtractResult(UInt32 indexType, UInt
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::CryptoGetTextPassword(BSTR *password)
+Z7_COM7F_IMF(CArchiveExtractCallback::CryptoGetTextPassword(BSTR *password))
 {
   COM_TRY_BEGIN
   if (!_cryptoGetTextPassword)
   {
     RINOK(_extractCallback2.QueryInterface(IID_ICryptoGetTextPassword,
-        &_cryptoGetTextPassword));
+        &_cryptoGetTextPassword))
   }
   return _cryptoGetTextPassword->CryptoGetTextPassword(password);
   COM_TRY_END
 }
 
+
+#ifndef Z7_SFX
 
 // ---------- HASH functions ----------
 
@@ -2984,13 +2813,13 @@ FString CArchiveExtractCallback::Hash_GetFullFilePath()
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::GetDiskProperty(UInt32 index, PROPID propID, PROPVARIANT *value)
+Z7_COM7F_IMF(CArchiveExtractCallback::GetDiskProperty(UInt32 index, PROPID propID, PROPVARIANT *value))
 {
   COM_TRY_BEGIN
   NCOM::CPropVariant prop;
   if (propID == kpidSize)
   {
-    RINOK(GetItem(index));
+    RINOK(GetItem(index))
     const FString fullProcessedPath = Hash_GetFullFilePath();
     NFile::NFind::CFileInfo fi;
     if (fi.Find_FollowLink(fullProcessedPath))
@@ -3003,7 +2832,7 @@ STDMETHODIMP CArchiveExtractCallback::GetDiskProperty(UInt32 index, PROPID propI
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::GetStream2(UInt32 index, ISequentialInStream **inStream, UInt32 mode)
+Z7_COM7F_IMF(CArchiveExtractCallback::GetStream2(UInt32 index, ISequentialInStream **inStream, UInt32 mode))
 {
   COM_TRY_BEGIN
   *inStream = NULL;
@@ -3011,7 +2840,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream2(UInt32 index, ISequentialInStre
   if (mode != NUpdateNotifyOp::kHashRead)
     return E_FAIL;
 
-  RINOK(GetItem(index));
+  RINOK(GetItem(index))
   const FString fullProcessedPath = Hash_GetFullFilePath();
 
   CInFileStream *inStreamSpec = new CInFileStream;
@@ -3019,7 +2848,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream2(UInt32 index, ISequentialInStre
   inStreamSpec->Set_PreserveATime(_ntOptions.PreserveATime);
   if (!inStreamSpec->OpenShared(fullProcessedPath, _ntOptions.OpenShareForWrite))
   {
-    RINOK(SendMessageError_with_LastError(kCantOpenInFile, fullProcessedPath));
+    RINOK(SendMessageError_with_LastError(kCantOpenInFile, fullProcessedPath))
     return S_OK;
   }
   *inStream = inStreamRef.Detach();
@@ -3028,13 +2857,86 @@ STDMETHODIMP CArchiveExtractCallback::GetStream2(UInt32 index, ISequentialInStre
 }
 
 
-STDMETHODIMP CArchiveExtractCallback::ReportOperation(
-    UInt32 /* indexType */, UInt32 /* index */, UInt32 /* op */)
+Z7_COM7F_IMF(CArchiveExtractCallback::ReportOperation(
+    UInt32 /* indexType */, UInt32 /* index */, UInt32 /* op */))
 {
   // COM_TRY_BEGIN
   return S_OK;
   // COM_TRY_END
 }
+
+
+Z7_COM7F_IMF(CArchiveExtractCallback::RequestMemoryUse(
+    UInt32 flags, UInt32 indexType, UInt32 index, const wchar_t *path,
+    UInt64 requiredSize, UInt64 *allowedSize, UInt32 *answerFlags))
+{
+  if ((flags & NRequestMemoryUseFlags::k_IsReport) == 0)
+  {
+    const UInt64 memLimit = _ntOptions.MemLimit;
+    if (memLimit != (UInt64)(Int64)-1)
+    {
+      // we overwrite allowedSize
+      *allowedSize = memLimit;
+      if (requiredSize <= memLimit)
+      {
+        *answerFlags = NRequestMemoryAnswerFlags::k_Allow;
+        return S_OK;
+      }
+      *answerFlags = NRequestMemoryAnswerFlags::k_Limit_Exceeded;
+      if (flags & NRequestMemoryUseFlags::k_SkipArc_IsExpected)
+        *answerFlags |= NRequestMemoryAnswerFlags::k_SkipArc;
+      flags |= NRequestMemoryUseFlags::k_SLimit_Exceeded
+            |  NRequestMemoryUseFlags::k_AllowedSize_WasForced;
+    }
+  }
+
+  if (!_requestMemoryUseCallback)
+  {
+    _extractCallback2.QueryInterface(IID_IArchiveRequestMemoryUseCallback,
+        &_requestMemoryUseCallback);
+    if (!_requestMemoryUseCallback)
+    {
+      // keep default (answerFlags) from caller or (answerFlags) that was set in this function
+      return S_OK;
+    }
+  }
+
+#if 0
+  if ((flags & NRequestMemoryUseFlags::k_IsReport) == 0)
+  if (requiredSize <= *allowedSize)
+  {
+    // it's expected, that *answerFlags was set to NRequestMemoryAnswerFlags::k_Allow already,
+    // because it's default answer for (requiredSize <= *allowedSize) case.
+    *answerFlags = NRequestMemoryAnswerFlags::k_Allow; // optional code
+  }
+  else
+  {
+    // we clear *answerFlags, because we want to disable dafault "Allow", if it's set.
+    // *answerFlags = 0;
+  /*
+      NRequestMemoryAnswerFlags::k_SkipArc |
+      NRequestMemoryAnswerFlags::k_Limit_Exceeded;
+  */
+  }
+#endif
+  
+  UString s;
+  if (!path
+      && indexType == NArchive::NEventIndexType::kInArcIndex
+      && index != (UInt32)(Int32)-1
+      && _arc)
+  {
+    RINOK(_arc->GetItem_Path(index, s))
+    path = s.Ptr();
+  }
+  
+  return _requestMemoryUseCallback->RequestMemoryUse(
+      flags, indexType, index, path,
+      requiredSize, allowedSize, answerFlags);
+}
+
+#endif // Z7_SFX
+
 
 
 // ------------ After Extracting functions ------------
@@ -3055,15 +2957,6 @@ void CDirPathSortPair::SetNumSlashes(const FChar *s)
 }
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
-//bool CDirPathTime::SetDirTime() const
-//{
-//  return NDir::SetDirTime(Path,
-//      CTime_Defined ? &CTime : NULL,
-//      ATime_Defined ? &ATime : NULL,
-//      MTime_Defined ? &MTime : NULL);
-//}
 bool CFiTimesCAM::SetDirTime_to_FS(CFSTR path) const
 {
   // it's same function for dir and for file
@@ -3072,15 +2965,10 @@ bool CFiTimesCAM::SetDirTime_to_FS(CFSTR path) const
       ATime_Defined ? &ATime : NULL,
       MTime_Defined ? &MTime : NULL);
 }
-// **************** NanaZip Modification End ****************
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01, multiple blocks.
 #ifdef SUPPORT_LINKS
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 bool CFiTimesCAM::SetLinkFileTime_to_FS(CFSTR path) const
 {
   // it's same function for dir and for file
@@ -3089,10 +2977,7 @@ bool CFiTimesCAM::SetLinkFileTime_to_FS(CFSTR path) const
       ATime_Defined ? &ATime : NULL,
       MTime_Defined ? &MTime : NULL);
 }
-// **************** NanaZip Modification End ****************
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01, modified for NanaZip.
 HRESULT CArchiveExtractCallback::SetPostLinks() const
 {
   FOR_VECTOR (i, _postLinks)
@@ -3112,7 +2997,7 @@ HRESULT CArchiveExtractCallback::SetPostLinks() const
       if (pt.IsSomeTimeDefined())
         pt.SetLinkFileTime_to_FS(link.fullProcessedPath_from);
 
-#ifdef _USE_SECURITY_CODE
+#ifdef Z7_USE_SECURITY_CODE
       // we set security information after timestamps setting
       RINOK(SetSecurityInfo(link.Index_in_Arc, link.fullProcessedPath_from))
 #endif
@@ -3120,10 +3005,8 @@ HRESULT CArchiveExtractCallback::SetPostLinks() const
   }
   return S_OK;
 }
-// **************** NanaZip Modification End ****************
 
 #endif
-// **************** NanaZip Modification End ****************
 
 
 HRESULT CArchiveExtractCallback::SetDirsTimes()
@@ -3134,26 +3017,22 @@ HRESULT CArchiveExtractCallback::SetDirsTimes()
   CRecordVector<CDirPathSortPair> pairs;
   pairs.ClearAndSetSize(_extractedFolders.Size());
   unsigned i;
-
+  
   for (i = 0; i < _extractedFolders.Size(); i++)
   {
     CDirPathSortPair &pair = pairs[i];
     pair.Index = i;
     pair.SetNumSlashes(_extractedFolders[i].Path);
   }
-
+  
   pairs.Sort2();
-
+  
   HRESULT res = S_OK;
 
   for (i = 0; i < pairs.Size(); i++)
   {
     const CDirPathTime &dpt = _extractedFolders[pairs[i].Index];
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.01.
-    //if (!dpt.SetDirTime())
     if (!dpt.SetDirTime_to_FS_2())
-    // **************** NanaZip Modification End ****************
     {
       // result = E_FAIL;
       // do we need error message here in Windows and in posix?
@@ -3183,8 +3062,6 @@ HRESULT CArchiveExtractCallback::SetDirsTimes()
 }
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.01.
 HRESULT CArchiveExtractCallback::CloseArc()
 {
   // we call CloseReparseAndFile() here because we can have non-closed file in some cases?
@@ -3204,4 +3081,3 @@ HRESULT CArchiveExtractCallback::CloseArc()
   _arc = NULL;
   return res;
 }
-// **************** NanaZip Modification End ****************

@@ -1,4 +1,4 @@
-﻿// ClassDefs.cpp
+// ClassDefs.cpp
 
 #include "StdAfx.h"
 

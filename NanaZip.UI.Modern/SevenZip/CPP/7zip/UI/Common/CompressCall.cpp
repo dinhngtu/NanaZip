@@ -1,4 +1,4 @@
-﻿// CompressCall.cpp
+// CompressCall.cpp
 
 #include "StdAfx.h"
 
@@ -17,10 +17,14 @@
 #include "../../../Windows/ProcessUtils.h"
 #include "../../../Windows/Synchronization.h"
 
+// **************** 7-Zip ZS Modification Start ****************
 #include "../FileManager/StringUtils.h"
+// **************** 7-Zip ZS Modification End ****************
 #include "../FileManager/RegistryUtils.h"
 
+// **************** 7-Zip ZS Modification Start ****************
 #include "ZipRegistry.h"
+// **************** 7-Zip ZS Modification End ****************
 #include "CompressCall.h"
 
 using namespace NWindows;
@@ -33,7 +37,10 @@ using namespace NWindows;
 #define MY_TRY_FINISH_VOID } \
   catch(...) { ErrorMessageHRESULT(E_FAIL); }
 
+// **************** NanaZip Modification Start ****************
+// #define k7zGui  "7zG.exe"
 #define k7zGui  "NanaZip.Windows.exe"
+// **************** NanaZip Modification End ****************
 
 // 21.07 : we can disable wildcard
 // #define ISWITCH_NO_WILDCARD_POSTFIX "w-"
@@ -50,17 +57,25 @@ using namespace NWindows;
 static NCompression::CInfo m_RegistryInfo;
 extern HWND g_HWND;
 
+// **************** 7-Zip ZS Modification Start ****************
+// Removed from 7-Zip ZS.
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
 UString GetQuotedString(const UString &s)
 {
   UString s2 ('\"');
   s2 += s;
-  s2 += '\"';
+  s2.Add_Char('\"');
   return s2;
 }
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+// **************** 7-Zip ZS Modification End ****************
 
 static void ErrorMessage(LPCWSTR message)
 {
+  // **************** NanaZip Modification Start ****************
+  // MessageBoxW(g_HWND, message, L"7-Zip", MB_ICONERROR | MB_OK);
   MessageBoxW(g_HWND, message, L"NanaZip", MB_ICONERROR | MB_OK);
+  // **************** NanaZip Modification End ****************
 }
 
 static void ErrorMessageHRESULT(HRESULT res, LPCWSTR s = NULL)
@@ -86,7 +101,7 @@ static HRESULT Call7zGui(const UString &params,
   const WRes wres = process.Create(imageName, params, NULL); // curDir);
   if (wres != 0)
   {
-    HRESULT hres = HRESULT_FROM_WIN32(wres);
+    const HRESULT hres = HRESULT_FROM_WIN32(wres);
     ErrorMessageHRESULT(hres, imageName);
     return hres;
   }
@@ -95,7 +110,7 @@ static HRESULT Call7zGui(const UString &params,
   else if (event != NULL)
   {
     HANDLE handles[] = { process, *event };
-    ::WaitForMultipleObjects(ARRAY_SIZE(handles), handles, FALSE, INFINITE);
+    ::WaitForMultipleObjects(Z7_ARRAY_SIZE(handles), handles, FALSE, INFINITE);
   }
   return S_OK;
 }
@@ -158,14 +173,14 @@ static HRESULT CreateMap(const UStringVector &names,
     event.Close();
   }
 
-  params += '#';
+  params.Add_Char('#');
   params += mappingName;
-  params += ':';
+  params.Add_Colon();
   char temp[32];
   ConvertUInt64ToString(totalSize, temp);
   params += temp;
 
-  params += ':';
+  params.Add_Colon();
   params += eventName;
 
   LPVOID data = fileMapping.Map(FILE_MAP_WRITE, 0, totalSize);
@@ -178,7 +193,7 @@ static HRESULT CreateMap(const UStringVector &names,
     FOR_VECTOR (i, names)
     {
       const UString &s = names[i];
-      unsigned len = s.Len() + 1;
+      const unsigned len = s.Len() + 1;
       wmemcpy(cur, (const wchar_t *)s, len);
       cur += len;
     }
@@ -186,6 +201,7 @@ static HRESULT CreateMap(const UStringVector &names,
   return S_OK;
 }
 
+// **************** 7-Zip ZS Modification Start ****************
 int FindRegistryFormat(const UString &name)
 {
   FOR_VECTOR (i, m_RegistryInfo.Formats)
@@ -208,6 +224,7 @@ int FindRegistryFormatAlways(const UString &name)
   }
   return index;
 }
+// **************** 7-Zip ZS Modification End ****************
 
 HRESULT CompressFiles(
     const UString &arcPathPrefix,
@@ -223,9 +240,17 @@ HRESULT CompressFiles(
   CFileMapping fileMapping;
   NSynchronization::CManualResetEvent event;
   params += kIncludeSwitch;
-  RINOK(CreateMap(names, fileMapping, event, params));
+  RINOK(CreateMap(names, fileMapping, event, params))
 
-  if (!arcType.IsEmpty() && arcType == L"7z")
+  // **************** 7-Zip ZS Modification Start ****************
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
+  if (!arcType.IsEmpty())
+  {
+    params += kArchiveTypeSwitch;
+    params += arcType;
+  }
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+  if (!arcType.IsEmpty() && ((arcType == L"7z") || (arcType == L"zip")))
   {
     int index;
     params += kArchiveTypeSwitch;
@@ -239,19 +264,18 @@ HRESULT CompressFiles(
 
       if (!fo.Method.IsEmpty())
       {
-        params += " -m0=";
+        params += (arcType == L"7z") ? " -m0=" : " -mm=";
         params += fo.Method;
       }
 
-      /* Level = 0 is meaningful */
-      if (fo.Level != static_cast<UInt32>(-1))
+      if (fo.Level)
       {
         params += " -mx=";
         ConvertUInt32ToString(fo.Level, temp);
         params += temp;
       }
 
-      if (fo.Dictionary && fo.Dictionary != static_cast<UInt32>(-1))
+      if (fo.Dictionary && (arcType == L"7z"))
       {
         params += " -md=";
         ConvertUInt32ToString(fo.Dictionary, temp);
@@ -259,7 +283,7 @@ HRESULT CompressFiles(
         params += "b";
       }
 
-      if (fo.BlockLogSize && fo.BlockLogSize != static_cast<UInt32>(-1))
+      if (fo.BlockLogSize && (arcType == L"7z"))
       {
         params += " -ms=";
         ConvertUInt64ToString(1ULL << fo.BlockLogSize, temp);
@@ -267,7 +291,7 @@ HRESULT CompressFiles(
         params += "b";
       }
 
-      if (fo.NumThreads && fo.NumThreads != static_cast<UInt32>(-1))
+      if (fo.NumThreads && fo.NumThreads != -1)
       {
         params += " -mmt=";
         ConvertUInt32ToString(fo.NumThreads, temp);
@@ -286,6 +310,7 @@ HRESULT CompressFiles(
       }
     }
   }
+  // **************** 7-Zip ZS Modification End ****************
 
   if (email)
     params += kEmailSwitch;
@@ -315,6 +340,10 @@ HRESULT CompressFiles(
     arcName);
   }
 
+  // **************** 7-Zip ZS Modification Start ****************
+  // Only a comment
+  // ErrorMessage(params);
+  // **************** 7-Zip ZS Modification End ****************
   return Call7zGui(params,
       // (arcPathPrefix.IsEmpty()? 0: (LPCWSTR)arcPathPrefix),
       waitFinish, &event);
@@ -427,7 +456,7 @@ void Benchmark(bool totalMode)
   if (totalMode)
     params += " -mm=*";
   AddLagePagesSwitch(params);
-  HRESULT result = Call7zGui(params, false, NULL);
+  const HRESULT result = Call7zGui(params, false, NULL);
   if (result != S_OK)
     ErrorMessageHRESULT(result);
   MY_TRY_FINISH_VOID

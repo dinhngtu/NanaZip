@@ -1,4 +1,4 @@
-﻿// LinkDialog.cpp
+// LinkDialog.cpp
 
 #include "StdAfx.h"
 
@@ -8,9 +8,7 @@
 #include "../../../Windows/FileIO.h"
 #include "../../../Windows/FileName.h"
 
-#ifdef LANG
 #include "LangUtils.h"
-#endif
 
 #include "BrowseDialog.h"
 #include "CopyDialogRes.h"
@@ -26,7 +24,7 @@ extern bool g_SymLink_Supported;
 using namespace NWindows;
 using namespace NFile;
 
-#ifdef LANG
+#ifdef Z7_LANG
 static const UInt32 kLangIDs[] =
 {
   IDB_LINK_LINK,
@@ -42,8 +40,6 @@ static const UInt32 kLangIDs[] =
 #endif
 
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 static bool GetSymLink(CFSTR path, CReparseAttr &attr, UString &errorMessage)
 {
   CByteBuffer buf;
@@ -69,10 +65,9 @@ static bool GetSymLink(CFSTR path, CReparseAttr &attr, UString &errorMessage)
   }
   return true;
 }
-// **************** NanaZip Modification End ****************
 
 
-static const int k_LinkType_Buttons[] =
+static const unsigned k_LinkType_Buttons[] =
 {
   IDR_LINK_TYPE_HARD,
   IDR_LINK_TYPE_SYM_FILE,
@@ -81,16 +76,19 @@ static const int k_LinkType_Buttons[] =
   IDR_LINK_TYPE_WSL
 };
 
-void CLinkDialog::Set_LinkType_Radio(int idb)
+void CLinkDialog::Set_LinkType_Radio(unsigned idb)
 {
-  CheckRadioButton(k_LinkType_Buttons[0], k_LinkType_Buttons[ARRAY_SIZE(k_LinkType_Buttons) - 1], idb);
+  CheckRadioButton(
+      k_LinkType_Buttons[0],
+      k_LinkType_Buttons[Z7_ARRAY_SIZE(k_LinkType_Buttons) - 1],
+      idb);
 }
 
 bool CLinkDialog::OnInit()
 {
-  #ifdef LANG
+  #ifdef Z7_LANG
   LangSetWindowText(*this, IDD_LINK);
-  LangSetDlgItems(*this, kLangIDs, ARRAY_SIZE(kLangIDs));
+  LangSetDlgItems(*this, kLangIDs, Z7_ARRAY_SIZE(kLangIDs));
   #endif
 
   _pathFromCombo.Attach(GetItem(IDC_LINK_PATH_FROM));
@@ -99,7 +97,7 @@ bool CLinkDialog::OnInit()
   if (!FilePath.IsEmpty())
   {
     NFind::CFileInfo fi;
-    int linkType = 0;
+    unsigned linkType = 0;
     if (!fi.Find(us2fs(FilePath)))
       linkType = IDR_LINK_TYPE_SYM_FILE;
     else
@@ -108,11 +106,11 @@ bool CLinkDialog::OnInit()
       {
         CReparseAttr attr;
         UString error;
-        bool res = GetSymLink(us2fs(FilePath), attr, error);
+        const bool res = GetSymLink(us2fs(FilePath), attr, error);
         if (!res && error.IsEmpty())
         {
-          DWORD lastError = GetLastError();
-          if (lastError != 0)
+          const DWORD lastError = GetLastError();
+          if (lastError)
             error = NError::MyFormatMessage(lastError);
         }
 
@@ -137,7 +135,7 @@ bool CLinkDialog::OnInit()
 
         SetItemText(IDT_LINK_PATH_TO_CUR, s);
 
-        UString destPath = attr.GetPath();
+        const UString destPath = attr.GetPath();
         _pathFromCombo.SetText(FilePath);
         _pathToCombo.SetText(destPath);
 
@@ -214,7 +212,7 @@ bool CLinkDialog::OnSize(WPARAM /* wParam */, int xSize, int ySize)
   return false;
 }
 
-bool CLinkDialog::OnButtonClicked(int buttonID, HWND buttonHWND)
+bool CLinkDialog::OnButtonClicked(unsigned buttonID, HWND buttonHWND)
 {
   switch (buttonID)
   {
@@ -239,7 +237,7 @@ void CLinkDialog::OnButton_SetPath(bool to)
     _pathFromCombo;
   combo.GetText(currentPath);
   // UString title = "Specify a location for output folder";
-  UString title = LangString(IDS_SET_FOLDER);
+  const UString title = LangString(IDS_SET_FOLDER);
 
   UString resultPath;
   if (!MyBrowseForFolder(*this, title, currentPath, resultPath))
@@ -251,7 +249,10 @@ void CLinkDialog::OnButton_SetPath(bool to)
 
 void CLinkDialog::ShowError(const wchar_t *s)
 {
+  // **************** NanaZip Modification Start ****************
+  // ::MessageBoxW(*this, s, L"7-Zip", MB_ICONERROR);
   ::MessageBoxW(*this, s, L"NanaZip", MB_ICONERROR);
+  // **************** NanaZip Modification End ****************
 }
 
 void CLinkDialog::ShowLastErrorMessage()
@@ -270,10 +271,10 @@ void CLinkDialog::OnButton_Link()
   if (!NName::IsAbsolutePath(from))
     from.Insert(0, CurDirPrefix);
 
-  int idb = -1;
+  unsigned idb = 0;
   for (unsigned i = 0;; i++)
   {
-    if (i >= ARRAY_SIZE(k_LinkType_Buttons))
+    if (i >= Z7_ARRAY_SIZE(k_LinkType_Buttons))
       return;
     idb = k_LinkType_Buttons[i];
     if (IsButtonCheckedBool(idb))
@@ -317,8 +318,6 @@ void CLinkDialog::OnButton_Link()
       return;
     }
 
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.00.
     CByteBuffer data;
     const bool isSymLink = (idb != IDR_LINK_TYPE_JUNCTION);
     FillLinkData(data, to, isSymLink, isWSL);
@@ -327,7 +326,6 @@ void CLinkDialog::OnButton_Link()
       ShowError(L"Incorrect link");
       return;
     }
-    // **************** NanaZip Modification End ****************
 
     CReparseAttr attr;
     if (!attr.Parse(data, data.Size()))
@@ -357,7 +355,7 @@ void CLinkDialog::OnButton_Link()
 
 void CApp::Link()
 {
-  unsigned srcPanelIndex = GetFocusedPanelIndex();
+  const unsigned srcPanelIndex = GetFocusedPanelIndex();
   CPanel &srcPanel = Panels[srcPanelIndex];
   if (!srcPanel.IsFSFolder())
   {
@@ -365,7 +363,7 @@ void CApp::Link()
     return;
   }
   CRecordVector<UInt32> indices;
-  srcPanel.GetOperatedItemIndices(indices);
+  srcPanel.Get_ItemIndices_Operated(indices);
   if (indices.IsEmpty())
     return;
   if (indices.Size() != 1)
@@ -373,25 +371,22 @@ void CApp::Link()
     srcPanel.MessageBox_Error_LangID(IDS_SELECT_ONE_FILE);
     return;
   }
-  int index = indices[0];
+  const UInt32 index = indices[0];
   const UString itemName = srcPanel.GetItemName(index);
 
   const UString fsPrefix = srcPanel.GetFsPath();
   const UString srcPath = fsPrefix + srcPanel.GetItemPrefix(index);
   UString path = srcPath;
   {
-    unsigned destPanelIndex = (NumPanels <= 1) ? srcPanelIndex : (1 - srcPanelIndex);
+    const unsigned destPanelIndex = (NumPanels <= 1) ? srcPanelIndex : (1 - srcPanelIndex);
     CPanel &destPanel = Panels[destPanelIndex];
     if (NumPanels > 1)
       if (destPanel.IsFSFolder())
         path = destPanel.GetFsPath();
   }
 
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.00.
   CSelectedState srcSelState;
   srcPanel.SaveSelectedState(srcSelState);
-  // **************** NanaZip Modification End ****************
 
   CLinkDialog dlg;
   dlg.CurDirPrefix = fsPrefix;
@@ -401,13 +396,10 @@ void CApp::Link()
   if (dlg.Create(srcPanel.GetParent()) != IDOK)
     return;
 
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.00.
   // we refresh srcPanel to show changes in "Link" (kpidNtReparse) column.
   // maybe we should refresh another panel also?
   if (srcPanel._visibleColumns.FindItem_for_PropID(kpidNtReparse) >= 0)
     srcPanel.RefreshListCtrl(srcSelState);
-  // **************** NanaZip Modification End ****************
 
   RefreshTitleAlways();
 }

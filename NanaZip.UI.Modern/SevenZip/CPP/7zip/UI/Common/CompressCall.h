@@ -1,11 +1,14 @@
-﻿// CompressCall.h
+// CompressCall.h
 
-#ifndef __COMPRESS_CALL_H
-#define __COMPRESS_CALL_H
+#ifndef ZIP7_INC_COMPRESS_CALL_H
+#define ZIP7_INC_COMPRESS_CALL_H
 
 #include "../../../Common/MyString.h"
 
-UString GetQuotedString(const UString &s);
+// **************** 7-Zip ZS Modification Start ****************
+// Removed in 7-Zip ZS.
+// UString GetQuotedString(const UString &s);
+// **************** 7-Zip ZS Modification End ****************
 
 HRESULT CompressFiles(
     const UString &arcPathPrefix,

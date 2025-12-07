@@ -1,4 +1,4 @@
-﻿#define IDS_CONTEXT_FOLDER              2320
+#define IDS_CONTEXT_FOLDER              2320
 #define IDS_CONTEXT_ARCHIVE             2321
 #define IDS_CONTEXT_OPEN                2322
 #define IDS_CONTEXT_EXTRACT             2323
@@ -12,5 +12,7 @@
 // **************** NanaZip Modification Start ****************
 #define IDS_CONTEXT_EXTRACT_HERE_SMART  2331
 // **************** NanaZip Modification End ****************
+
+#define IDS_SELECT_FILES                3015
 
 #define IDB_MENU_LOGO  190

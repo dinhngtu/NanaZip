@@ -1,25 +1,44 @@
 #include "../GUI/ExtractDialogRes.h"
 
-#define y 64
+#define y 96
 
-#define zoneX 90
+#define zoneX 100
 
+// **************** NanaZip Modification Start ****************
+// CAPTION "7-Zip"
 CAPTION "Integration"
+// **************** NanaZip Modification End ****************
 BEGIN
-  PUSHBUTTON  "Open Windows Settings app to associate files with NanaZip", IDB_SYSTEM_ASSOCIATE, m, m, xc, bys
+  // **************** NanaZip Modification Start ****************
+  // Removed from NanaZip.
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
+  MY_CONTROL_CHECKBOX ( "Integrate 7-Zip to shell context menu", IDX_SYSTEM_INTEGRATE_TO_MENU, m, m, xc)
+  MY_CONTROL_CHECKBOX ( "(32-bit)", IDX_SYSTEM_INTEGRATE_TO_MENU_2, m, m + 14, xc)
+  MY_CONTROL_CHECKBOX ( "Cascaded context menu", IDX_SYSTEM_CASCADED_MENU, m, m + 28, xc)
+  MY_CONTROL_CHECKBOX ( "Icons in context menu", IDX_SYSTEM_ICON_IN_MENU, m, m + 42, xc)
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
 
-  CONTROL   "Eliminate duplication of root folder", IDX_EXTRACT_ELIM_DUP, MY_CHECKBOX, m, m + 24, xc, 10
+  PUSHBUTTON  "Open Windows Settings app to associate files with NanaZip", IDB_SYSTEM_ASSOCIATE, m, m, xc
 
+  // Offsets adjusted.
+  // MY_CONTROL_CHECKBOX ( "Eliminate duplication of root folder", IDX_EXTRACT_ELIM_DUP, m, m + 56, xc)
+  MY_CONTROL_CHECKBOX ( "Eliminate duplication of root folder", IDX_EXTRACT_ELIM_DUP, m, m + 24, xc)
+
+  // LTEXT    "Propagate Zone.Id stream:", IDT_SYSTEM_ZONE, m, m + 70, xc - zoneX, 8
   LTEXT    "Propagate Zone.Id stream:", IDT_SYSTEM_ZONE, m, m + 38, xc - zoneX, 8
+  // COMBOBOX  IDC_SYSTEM_ZONE, m + xc - zoneX, m + 70 - 2, zoneX, 50, MY_COMBO
   COMBOBOX  IDC_SYSTEM_ZONE, m + xc - zoneX, m + 38 - 2, zoneX, 50, MY_COMBO
 
+  // LTEXT    "Context menu items:", IDT_SYSTEM_CONTEXT_MENU_ITEMS, m, m + 84, xc, 8
   LTEXT    "Context menu items:", IDT_SYSTEM_CONTEXT_MENU_ITEMS, m, m + 52, xc, 8
+  // **************** NanaZip Modification End ****************
+
   CONTROL  "List", IDL_SYSTEM_OPTIONS, "SysListView32",
            LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,
            m, m + y, xc, yc - y
 
   // **************** NanaZip Modification Start ****************
-  CONTROL  "Extract on open", IDX_EXTRACT_ON_OPEN, MY_CHECKBOX, m, m + yc + 14, xc, 10
+  MY_CONTROL_CHECKBOX ( "Extract on open", IDX_EXTRACT_ON_OPEN, m, m + yc + 14, xc)
   // **************** NanaZip Modification End ****************
 END
 

@@ -1,7 +1,7 @@
 ﻿// DirItem.h
 
-#ifndef __DIR_ITEM_H
-#define __DIR_ITEM_H
+#ifndef ZIP7_INC_DIR_ITEM_H
+#define ZIP7_INC_DIR_ITEM_H
 
 #ifdef _WIN32
 #include "../../../Common/MyLinux.h"
@@ -24,9 +24,9 @@ struct CDirItemsStat
   UInt64 NumAltStreams;
   UInt64 FilesSize;
   UInt64 AltStreamsSize;
-
+  
   UInt64 NumErrors;
-
+  
   // UInt64 Get_NumItems() const { return NumDirs + NumFiles + NumAltStreams; }
   UInt64 Get_NumDataItems() const { return NumFiles + NumAltStreams; }
   UInt64 GetTotalBytes() const { return FilesSize + AltStreamsSize; }
@@ -38,7 +38,7 @@ struct CDirItemsStat
         && 0 == FilesSize
         && 0 == AltStreamsSize
         && 0 == NumErrors; }
-
+  
   CDirItemsStat():
       NumDirs(0),
       NumFiles(0),
@@ -55,7 +55,7 @@ struct CDirItemsStat2: public CDirItemsStat
   UInt64 Anti_NumDirs;
   UInt64 Anti_NumFiles;
   UInt64 Anti_NumAltStreams;
-
+  
   // UInt64 Get_NumItems() const { return Anti_NumDirs + Anti_NumFiles + Anti_NumAltStreams + CDirItemsStat::Get_NumItems(); }
   UInt64 Get_NumDataItems2() const { return Anti_NumFiles + Anti_NumAltStreams + CDirItemsStat::Get_NumDataItems(); }
 
@@ -63,7 +63,7 @@ struct CDirItemsStat2: public CDirItemsStat
         && 0 == Anti_NumDirs
         && 0 == Anti_NumFiles
         && 0 == Anti_NumAltStreams; }
-
+  
   CDirItemsStat2():
       Anti_NumDirs(0),
       Anti_NumFiles(0),
@@ -72,15 +72,15 @@ struct CDirItemsStat2: public CDirItemsStat
 };
 
 
+Z7_PURE_INTERFACES_BEGIN
 
-#define INTERFACE_IDirItemsCallback(x) \
-  virtual HRESULT ScanError(const FString &path, DWORD systemError) x; \
-  virtual HRESULT ScanProgress(const CDirItemsStat &st, const FString &path, bool isDir) x; \
+#define Z7_IFACEN_IDirItemsCallback(x) \
+  virtual HRESULT ScanError(const FString &path, DWORD systemError) x \
+  virtual HRESULT ScanProgress(const CDirItemsStat &st, const FString &path, bool isDir) x \
 
-struct IDirItemsCallback
-{
-  INTERFACE_IDirItemsCallback(=0)
-};
+Z7_IFACE_DECL_PURE(IDirItemsCallback)
+
+Z7_PURE_INTERFACES_END
 
 
 struct CArcTime
@@ -231,7 +231,7 @@ struct CArcTime
 struct CDirItem: public NWindows::NFile::NFind::CFileInfoBase
 {
   UString Name;
-
+  
  #ifndef UNDER_CE
   CByteBuffer ReparseData;
 
@@ -244,7 +244,7 @@ struct CDirItem: public NWindows::NFile::NFind::CFileInfoBase
  #endif // _WIN32
 
  #endif // !UNDER_CE
-
+  
   void Copy_From_FileInfoBase(const NWindows::NFile::NFind::CFileInfoBase &fi)
   {
     (NWindows::NFile::NFind::CFileInfoBase &)*this = fi;
@@ -260,6 +260,8 @@ struct CDirItem: public NWindows::NFile::NFind::CFileInfoBase
   int OwnerGroupIndex;
  #endif
 
+  // bool Attrib_IsDefined;
+
   CDirItem():
       PhyParent(-1)
     , LogParent(-1)
@@ -269,6 +271,7 @@ struct CDirItem: public NWindows::NFile::NFind::CFileInfoBase
     , OwnerNameIndex(-1)
     , OwnerGroupIndex(-1)
    #endif
+    // , Attrib_IsDefined(true)
   {
   }
 
@@ -317,7 +320,7 @@ public:
   {
     return isDir ? !ExcludeDirItems : !ExcludeFileItems;
   }
-
+ 
 
   CDirItemsStat Stat;
 
@@ -332,18 +335,18 @@ public:
   CByteBuffer TempSecureBuf;
   bool _saclEnabled;
   bool ReadSecure;
-
+  
   HRESULT AddSecurityItem(const FString &path, int &secureIndex);
   HRESULT FillFixedReparse();
 
  #endif
 
  #ifndef _WIN32
-
+  
   C_UInt32_UString_Map OwnerNameMap;
   C_UInt32_UString_Map OwnerGroupMap;
   bool StoreOwnerName;
-
+  
   HRESULT FillDeviceSizes();
 
  #endif
@@ -369,7 +372,7 @@ public:
 
   // HRESULT EnumerateOneDir(const FString &phyPrefix, CObjectVector<NWindows::NFile::NFind::CDirEntry> &files);
   HRESULT EnumerateOneDir(const FString &phyPrefix, CObjectVector<NWindows::NFile::NFind::CFileInfo> &files);
-
+  
   HRESULT EnumerateItems2(
     const FString &phyPrefix,
     const UString &logPrefix,
@@ -392,7 +395,7 @@ struct CArcItem
   bool Size_Defined;
   bool Censored;
   UInt32 IndexInServer;
-
+  
   CArcItem():
       IsDir(false),
       IsAltStream(false),

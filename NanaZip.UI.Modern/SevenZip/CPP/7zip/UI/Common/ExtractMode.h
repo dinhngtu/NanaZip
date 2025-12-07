@@ -1,10 +1,10 @@
 ﻿// ExtractMode.h
 
-#ifndef __EXTRACT_MODE_H
-#define __EXTRACT_MODE_H
+#ifndef ZIP7_INC_EXTRACT_MODE_H
+#define ZIP7_INC_EXTRACT_MODE_H
 
 namespace NExtract {
-
+  
 namespace NPathMode
 {
   enum EEnum
@@ -39,7 +39,7 @@ namespace NZoneIdMode
   };
 
   // **************** NanaZip Modification Start ****************
-static inline const EEnum Default = kAll;
+  static inline const EEnum Default = kAll;
   // **************** NanaZip Modification End ****************
 }
 

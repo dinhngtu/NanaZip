@@ -1,7 +1,7 @@
-﻿// ZipRegistry.h
+// ZipRegistry.h
 
-#ifndef __ZIP_REGISTRY_H
-#define __ZIP_REGISTRY_H
+#ifndef ZIP7_INC_ZIP_REGISTRY_H
+#define ZIP7_INC_ZIP_REGISTRY_H
 
 #include "../../../Common/MyTypes.h"
 #include "../../../Common/MyString.h"
@@ -46,6 +46,9 @@ namespace NExtract
 
   void Save_ShowPassword(bool showPassword);
   bool Read_ShowPassword();
+
+  void Save_LimitGB(UInt32 limit_GB);
+  UInt32 Read_LimitGB();
 }
 
 namespace NCompression
@@ -84,6 +87,7 @@ namespace NCompression
   {
     UInt32 Level;
     UInt32 Dictionary;
+    // UInt32 DictionaryChain;
     UInt32 Order;
     UInt32 BlockLogSize;
     UInt32 NumThreads;
@@ -96,7 +100,6 @@ namespace NCompression
 
     CSysString FormatID;
     UString Method;
-    UString SplitVolume;
     UString Options;
     UString EncryptionMethod;
     UString MemUse;
@@ -120,6 +123,7 @@ namespace NCompression
     void ResetForLevelChange()
     {
       BlockLogSize = NumThreads = Level = Dictionary = Order = (UInt32)(Int32)-1;
+      // DictionaryChain = (UInt32)(Int32)-1;
       Method.Empty();
       // Options.Empty();
       // EncryptionMethod.Empty();
@@ -137,10 +141,6 @@ namespace NCompression
     UInt32 Level;
     bool ShowPassword;
     bool EncryptHeaders;
-    UString ArcType;
-    UStringVector ArcPaths;
-
-    CObjectVector<CFormatOptions> Formats;
 
     CBoolPair NtSecurity;
     CBoolPair AltStreams;
@@ -149,8 +149,16 @@ namespace NCompression
 
     CBoolPair PreserveATime;
 
+    UString ArcType;
+    UStringVector ArcPaths;
+
+    CObjectVector<CFormatOptions> Formats;
+
     void Save() const;
     void Load();
+    // **************** 7-Zip ZS Modification Start ****************
+    void LoadAndUpdateFormatByMethod(CFormatOptions &fo);
+    // **************** 7-Zip ZS Modification End ****************
   };
 }
 
@@ -168,8 +176,8 @@ namespace NWorkDir
   struct CInfo
   {
     NMode::EEnum Mode;
-    FString Path;
     bool ForRemovableOnly;
+    FString Path;
 
     void SetForRemovableOnlyDefault() { ForRemovableOnly = true; }
     void SetDefault()

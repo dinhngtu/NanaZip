@@ -49,7 +49,7 @@ static void ReplaceIncorrectChars(UString &s)
       }
     }
   }
-
+  
   if (g_PathTrailReplaceMode)
   {
     /*
@@ -124,7 +124,7 @@ static const char * const g_ReservedNames[] =
 
 static bool IsSupportedName(const UString &name)
 {
-  for (unsigned i = 0; i < ARRAY_SIZE(g_ReservedNames); i++)
+  for (unsigned i = 0; i < Z7_ARRAY_SIZE(g_ReservedNames); i++)
   {
     const char *reservedName = g_ReservedNames[i];
     unsigned len = MyStringLen(reservedName);
@@ -180,11 +180,11 @@ UString Get_Correct_FsFile_Name(const UString &name)
 {
   UString res = name;
   Correct_PathPart(res);
-
+  
   #ifdef _WIN32
   CorrectUnsupportedName(res);
   #endif
-
+  
   if (res.IsEmpty())
     res = k_EmptyReplaceName;
   return res;
@@ -200,7 +200,7 @@ void Correct_FsPath(bool absIsAllowed, bool keepAndReplaceEmptyPrefixes, UString
     #if defined(_WIN32) && !defined(UNDER_CE)
     bool isDrive = false;
     #endif
-
+    
     if (parts[0].IsEmpty())
     {
       i = 1;
@@ -208,7 +208,7 @@ void Correct_FsPath(bool absIsAllowed, bool keepAndReplaceEmptyPrefixes, UString
       if (parts.Size() > 1 && parts[1].IsEmpty())
       {
         i = 2;
-        if (parts.Size() > 2 && parts[2] == L"?")
+        if (parts.Size() > 2 && parts[2].IsEqualTo("?"))
         {
           i = 3;
           if (parts.Size() > 3 && NWindows::NFile::NName::IsDrivePath2(parts[3]))
@@ -266,7 +266,7 @@ void Correct_FsPath(bool absIsAllowed, bool keepAndReplaceEmptyPrefixes, UString
       CorrectUnsupportedName(s);
       #endif
     }
-
+    
     i++;
   }
 

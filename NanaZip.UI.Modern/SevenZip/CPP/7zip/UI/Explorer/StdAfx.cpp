@@ -1,3 +1,3 @@
-﻿// StdAfx.cpp
+// StdAfx.cpp
 
 #include "StdAfx.h"

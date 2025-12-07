@@ -1,7 +1,7 @@
 ﻿// OpenArchive.h
 
-#ifndef __OPEN_ARCHIVE_H
-#define __OPEN_ARCHIVE_H
+#ifndef ZIP7_INC_OPEN_ARCHIVE_H
+#define ZIP7_INC_OPEN_ARCHIVE_H
 
 #include "../../../Windows/PropVariant.h"
 
@@ -10,7 +10,7 @@
 #include "Property.h"
 #include "DirItem.h"
 
-#ifndef _SFX
+#ifndef Z7_SFX
 
 #define SUPPORT_ALT_STREAMS
 
@@ -34,7 +34,7 @@ struct COptionalOpenProperties
 };
 */
 
-#ifdef _SFX
+#ifdef Z7_SFX
 #define OPEN_PROPS_DECL
 #else
 #define OPEN_PROPS_DECL const CObjectVector<CProperty> *props;
@@ -162,7 +162,7 @@ struct CArcErrorInfo
   /* if CArc is Open OK with some format:
         - ErrorFormatIndex shows error format index, if extension is incorrect
         - other variables show message and warnings of archive that is open */
-
+  
   UString ErrorMessage;
   UString WarningMessage;
 
@@ -243,7 +243,7 @@ struct CReadArcItem
   bool MainIsDir;
   UInt32 ParentIndex; // use it, if IsAltStream
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
   bool _use_baseParentFolder_mode;
   int _baseParentFolder;
   #endif
@@ -254,7 +254,7 @@ struct CReadArcItem
     WriteToAltStreamIfColon = false;
     #endif
 
-    #ifndef _SFX
+    #ifndef Z7_SFX
     _use_baseParentFolder_mode = false;
     _baseParentFolder = -1;
     #endif
@@ -270,7 +270,7 @@ class CArc
   HRESULT CheckZerosTail(const COpenOptions &op, UInt64 offset);
   HRESULT OpenStream2(const COpenOptions &options);
 
-  #ifndef _SFX
+  #ifndef Z7_SFX
   // parts.Back() can contain alt stream name "nams:AltName"
   HRESULT GetItem_PathToParent(UInt32 index, UInt32 parent, UStringVector &parts) const;
   #endif
@@ -281,12 +281,21 @@ public:
           // we use InStream in 2 cases (ArcStreamOffset != 0):
           // 1) if we use additional cache stream
           // 2) we reopen sfx archive with CTailInStream
-
+  
   CMyComPtr<IArchiveGetRawProps> GetRawProps;
   CMyComPtr<IArchiveGetRootProps> GetRootProps;
 
-  CArcErrorInfo ErrorInfo; // for OK archives
-  CArcErrorInfo NonOpen_ErrorInfo; // ErrorInfo for mainArchive (false OPEN)
+  bool IsParseArc;
+
+  bool IsTree;
+  bool IsReadOnly;
+  
+  bool Ask_Deleted;
+  bool Ask_AltStream;
+  bool Ask_Aux;
+  bool Ask_INode;
+
+  bool IgnoreSplit; // don't try split handler
 
   UString Path;
   UString filePath;
@@ -297,7 +306,7 @@ public:
   // CFiTime MTime;
   // bool MTime_Defined;
   CArcTime MTime;
-
+  
   Int64 Offset; // it's offset of start of archive inside stream that is open by Archive Handler
   UInt64 PhySize;
   // UInt64 OkPhySize;
@@ -305,7 +314,9 @@ public:
   // bool OkPhySize_Defined;
   UInt64 FileSize;
   UInt64 AvailPhySize; // PhySize, but it's reduced if exceed end of file
-  // bool offsetDefined;
+
+  CArcErrorInfo ErrorInfo; // for OK archives
+  CArcErrorInfo NonOpen_ErrorInfo; // ErrorInfo for mainArchive (false OPEN)
 
   UInt64 GetEstmatedPhySize() const { return PhySize_Defined ? PhySize : FileSize; }
 
@@ -313,18 +324,6 @@ public:
   Int64 GetGlobalOffset() const { return (Int64)ArcStreamOffset + Offset; } // it's global offset of archive
 
   // AString ErrorFlagsText;
-
-  bool IsParseArc;
-
-  bool IsTree;
-  bool IsReadOnly;
-
-  bool Ask_Deleted;
-  bool Ask_AltStream;
-  bool Ask_Aux;
-  bool Ask_INode;
-
-  bool IgnoreSplit; // don't try split handler
 
   // void Set_ErrorFlagsText();
 
@@ -341,8 +340,6 @@ public:
 
   HRESULT ReadBasicProps(IInArchive *archive, UInt64 startPos, HRESULT openRes);
 
-  // ~CArc();
-
   HRESULT Close()
   {
     InStream.Release();
@@ -351,12 +348,12 @@ public:
 
   HRESULT GetItem_Path(UInt32 index, UString &result) const;
   HRESULT GetItem_DefaultPath(UInt32 index, UString &result) const;
-
+  
   // GetItemPath2 adds [DELETED] dir prefix for deleted items.
   HRESULT GetItem_Path2(UInt32 index, UString &result) const;
 
   HRESULT GetItem(UInt32 index, CReadArcItem &item) const;
-
+  
   HRESULT GetItem_Size(UInt32 index, UInt64 &size, bool &defined) const;
 
   /* if (GetProperty() returns vt==VT_EMPTY), this function sets
@@ -379,7 +376,7 @@ public:
   HRESULT OpenStreamOrFile(COpenOptions &options);
 
   HRESULT ReOpen(const COpenOptions &options, IArchiveOpenCallback *openCallback_Additional);
-
+  
   HRESULT CreateNewTailStream(CMyComPtr<IInStream> &stream);
 
   bool IsHashHandler(const COpenOptions &options) const
@@ -457,7 +454,7 @@ struct CDirPathSortPair
   unsigned Index;
 
   void SetNumSlashes(const FChar *s);
-
+  
   int Compare(const CDirPathSortPair &a) const
   {
     // We need sorting order where parent items will be after child items

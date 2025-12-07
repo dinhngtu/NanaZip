@@ -1,4 +1,4 @@
-﻿// EditPage.cpp
+// EditPage.cpp
 
 #include "StdAfx.h"
 
@@ -6,11 +6,16 @@
 #include "EditPageRes.h"
 
 #include "BrowseDialog.h"
+// **************** NanaZip Modification Start ****************
+// Removed from NanaZip.
+// #include "HelpUtils.h"
+// **************** NanaZip Modification End ****************
 #include "LangUtils.h"
 #include "RegistryUtils.h"
 
 using namespace NWindows;
 
+#ifdef Z7_LANG
 static const UInt32 kLangIDs[] =
 {
   IDT_EDIT_EDITOR,
@@ -21,13 +26,21 @@ static const UInt32 kLangIDs_Colon[] =
 {
   IDT_EDIT_VIEWER
 };
+#endif
+
+// **************** NanaZip Modification Start ****************
+// Removed from NanaZip.
+// #define kEditTopic "FM/options.htm#editor"
+// **************** NanaZip Modification End ****************
 
 bool CEditPage::OnInit()
 {
   _initMode = true;
 
-  LangSetDlgItems(*this, kLangIDs, ARRAY_SIZE(kLangIDs));
-  LangSetDlgItems_Colon(*this, kLangIDs_Colon, ARRAY_SIZE(kLangIDs_Colon));
+  #ifdef Z7_LANG
+  LangSetDlgItems(*this, kLangIDs, Z7_ARRAY_SIZE(kLangIDs));
+  LangSetDlgItems_Colon(*this, kLangIDs_Colon, Z7_ARRAY_SIZE(kLangIDs_Colon));
+  #endif
 
   _ctrls[0].Ctrl = IDE_EDIT_VIEWER; _ctrls[0].Button = IDB_EDIT_VIEWER;
   _ctrls[1].Ctrl = IDE_EDIT_EDITOR; _ctrls[1].Button = IDB_EDIT_EDITOR;
@@ -71,6 +84,16 @@ LONG CEditPage::OnApply()
   return PSNRET_NOERROR;
 }
 
+// **************** NanaZip Modification Start ****************
+// Removed from NanaZip.
+#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
+void CEditPage::OnNotifyHelp()
+{
+  ShowHelpWindow(kEditTopic);
+}
+#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
+// **************** NanaZip Modification End ****************
+
 void SplitCmdLineSmart(const UString &cmd, UString &prg, UString &params);
 
 static void Edit_BrowseForFile(NWindows::NControl::CEdit &edit, HWND hwnd)
@@ -83,12 +106,20 @@ static void Edit_BrowseForFile(NWindows::NControl::CEdit &edit, HWND hwnd)
 
   SplitCmdLineSmart(cmd, prg, param);
 
-  UString resPath;
+  CObjectVector<CBrowseFilterInfo> filters;
+  CBrowseFilterInfo &bfi = filters.AddNew();
+  bfi.Description = "*.exe";
+  bfi.Masks.Add(UString("*.exe"));
 
-  if (MyBrowseForFile(hwnd, 0, prg, NULL, L"*.exe", resPath))
+  CBrowseInfo bi;
+  bi.FilterIndex = 0;
+  bi.FilePath = prg;
+  bi.hwndOwner = hwnd;
+
+  if (bi.BrowseForFile(filters))
   {
-    resPath.Trim();
-    cmd = resPath;
+    cmd = bi.FilePath;
+    cmd.Trim();
     /*
     if (!param.IsEmpty() && !resPath.IsEmpty())
     {
@@ -104,7 +135,7 @@ static void Edit_BrowseForFile(NWindows::NControl::CEdit &edit, HWND hwnd)
   }
 }
 
-bool CEditPage::OnButtonClicked(int buttonID, HWND buttonHWND)
+bool CEditPage::OnButtonClicked(unsigned buttonID, HWND buttonHWND)
 {
   for (unsigned i = 0; i < 3; i++)
   {
@@ -119,7 +150,7 @@ bool CEditPage::OnButtonClicked(int buttonID, HWND buttonHWND)
   return CPropertyPage::OnButtonClicked(buttonID, buttonHWND);
 }
 
-bool CEditPage::OnCommand(int code, int itemID, LPARAM param)
+bool CEditPage::OnCommand(unsigned code, unsigned itemID, LPARAM param)
 {
   if (!_initMode && code == EN_CHANGE)
   {
