@@ -178,7 +178,7 @@ void CPanel::Properties()
     InvokeSystemCommand("properties");
     return;
   }
-
+  
   {
     CListViewDialog message;
     // message.DeleteIsAllowed = false;
@@ -186,7 +186,7 @@ void CPanel::Properties()
 
     CRecordVector<UInt32> operatedIndices;
     Get_ItemIndices_Operated(operatedIndices);
-
+    
     if (operatedIndices.Size() == 1)
     {
       UInt32 index = operatedIndices[0];
@@ -199,10 +199,10 @@ void CPanel::Properties()
           CMyComBSTR name;
           PROPID propID;
           VARTYPE varType;
-
+          
           if (_folder->GetPropertyInfo(i, &name, &propID, &varType) != S_OK)
             continue;
-
+          
           NCOM::CPropVariant prop;
           if (_folder->GetProperty(index, propID, &prop) != S_OK)
             continue;
@@ -294,7 +294,7 @@ void CPanel::Properties()
       AddSeparator(message);
     }
 
-
+        
     /*
     AddLangString(message, IDS_PROP_FILE_TYPE);
     message += kPropValueSeparator;
@@ -351,7 +351,7 @@ void CPanel::Properties()
               const int kNumSpecProps = Z7_ARRAY_SIZE(kSpecProps);
 
               AddSeparator(message);
-
+              
               for (Int32 i = -(int)kNumSpecProps; i < (Int32)numProps; i++)
               {
                 CMyComBSTR name;
@@ -368,7 +368,7 @@ void CPanel::Properties()
               }
             }
           }
-
+          
           if (level2 < numLevels - 1)
           {
             const UInt32 level = numLevels - 1 - level2;
@@ -391,7 +391,7 @@ void CPanel::Properties()
             }
           }
         }
-
+        
         {
           // we ERROR message for NonOpen level
               bool needSep = true;
@@ -416,34 +416,9 @@ void CPanel::Properties()
       }
     }
 
-    // **************** NanaZip Modification Start ****************
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
     message.Title = LangString(IDS_PROPERTIES);
     message.NumColumns = 2;
     message.Create(GetParent());
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-    const std::wstring charsToTrim = L" \n-";
-
-    // Find the position of the last character that is NOT in our set
-    size_t lastChar = message.find_last_not_of(charsToTrim);
-
-    // If such a character is found, erase everything from the next position onward
-    if (std::string::npos != lastChar) {
-        message.erase(lastChar + 1);
-    }
-    // Otherwise, if the string contains ONLY trim characters, clear the whole string
-    else {
-        message.clear();
-    }
-
-    // message.Title = LangString(IDS_PROPERTIES);
-    // message.NumColumns = 2;
-    // message.Create(GetParent());
-    ::K7ModernShowInformationDialog(
-        this->GetParent(),
-        ::LangString(IDS_PROPERTIES).Ptr(),
-        message.c_str());
-    // **************** NanaZip Modification End ****************
   }
 }
 
@@ -537,7 +512,7 @@ HRESULT CPanel::CreateShellContextMenu(
     // ShowMessage("Failed to get Desktop folder");
     return E_FAIL;
   }
-
+  
   CFolderPidls pidls;
   // NULL is allowed for parentHWND in ParseDisplayName()
   const HWND parentHWND_for_ParseDisplayName = GetParent();
@@ -596,7 +571,7 @@ HRESULT CPanel::CreateShellContextMenu(
         GetParent(), IID_IContextMenu, (void**)&systemContextMenu);
     */
   }
-
+  
   CMyComPtr<IShellFolder> parentFolder;
   RINOK(desktopFolder->BindToObject(pidls.parent,
       NULL, IID_IShellFolder, (void**)&parentFolder))
@@ -604,7 +579,7 @@ HRESULT CPanel::CreateShellContextMenu(
     return E_FAIL;
 
   ODS("==== CPanel::CreateShellContextMenu pidls START");
-
+  
   pidls.items.ClearAndReserve(operatedIndices.Size());
   UString fileName;
   FOR_VECTOR (i, operatedIndices)
@@ -717,7 +692,7 @@ void CPanel::CreateSystemMenu(HMENU menuSpec,
 
   if (!systemContextMenu)
     return;
-
+  
   /*
   // Set up a CMINVOKECOMMANDINFO structure.
   CMINVOKECOMMANDINFO ci;
@@ -725,7 +700,7 @@ void CPanel::CreateSystemMenu(HMENU menuSpec,
   ci.cbSize = sizeof(CMINVOKECOMMANDINFO);
   ci.hwnd = GetParent();
   */
-
+  
   /*
   if (Sender == GoBtn)
   {
@@ -740,13 +715,13 @@ void CPanel::CreateSystemMenu(HMENU menuSpec,
       action = "delete";
     else if (PropertiesRb->Checked)
       action = "properties";
-
+    
     ci.lpVerb = action.c_str();
     result = cm->InvokeCommand(&ci);
     if (result)
       ShowMessage(
       "Error copying file to clipboard.");
-
+    
   }
   else
   */
@@ -768,7 +743,7 @@ void CPanel::CreateSystemMenu(HMENU menuSpec,
       #ifdef SHOW_DEBUG_FM_CTX_MENU
       PrintAllContextItems(systemContextMenu, (unsigned)res);
       #endif
-
+      
       CMenu menu;
       menu.Attach(menuSpec);
       CMenuItem menuItem;
@@ -917,10 +892,10 @@ bool CPanel::CheckBeforeUpdate(UINT resourceID)
       folder = _folder;
     else
       folder = _parentFolders[i].ParentFolder;
-
+    
     if (!IsReadOnlyFolder(folder))
       continue;
-
+    
     UString s;
     AddLangString(s, resourceID);
     s.Add_LF();
@@ -971,7 +946,7 @@ void CPanel::CreateFileMenu(HMENU menuSpec,
   */
 
   CFileMenu fm;
-
+  
   fm.readOnly = IsThereReadOnlyFolder();
   fm.isHashFolder = IsHashFolder();
   fm.isFsFolder = Is_IO_FS_Folder();
@@ -980,7 +955,7 @@ void CPanel::CreateFileMenu(HMENU menuSpec,
   fm.numItems = operatedIndices.Size();
 
   fm.isAltStreamsSupported = false;
-
+  
   if (fm.numItems == 1)
     fm.FilePath = us2fs(GetItemFullPath(operatedIndices[0]));
 
@@ -1041,10 +1016,10 @@ bool CPanel::InvokePluginCommand(unsigned id,
     CMINVOKECOMMANDINFO
   #endif
       commandInfo;
-
+  
   memset(&commandInfo, 0, sizeof(commandInfo));
   commandInfo.cbSize = sizeof(commandInfo);
-
+  
   commandInfo.fMask = 0
   #ifdef use_CMINVOKECOMMANDINFOEX
     | CMIC_MASK_UNICODE
@@ -1059,9 +1034,9 @@ bool CPanel::InvokePluginCommand(unsigned id,
   const AString currentFolderA (GetAnsiString(_currentFolderPrefix));
   commandInfo.lpDirectory = (LPCSTR)(currentFolderA);
   commandInfo.nShow = SW_SHOW;
-
+  
   #ifdef use_CMINVOKECOMMANDINFOEX
-
+  
   commandInfo.lpParametersW = NULL;
   commandInfo.lpTitle = "";
 
@@ -1083,9 +1058,9 @@ bool CPanel::InvokePluginCommand(unsigned id,
   // commandInfo.ptInvoke.y = yPos;
   commandInfo.ptInvoke.x = 0;
   commandInfo.ptInvoke.y = 0;
-
+  
   #endif
-
+  
   HRESULT result;
   if (isSystemMenu)
     result = systemContextMenu->InvokeCommand(LPCMINVOKECOMMANDINFO(&commandInfo));

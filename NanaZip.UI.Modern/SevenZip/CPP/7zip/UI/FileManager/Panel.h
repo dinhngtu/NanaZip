@@ -3,13 +3,6 @@
 #ifndef ZIP7_INC_PANEL_H
 #define ZIP7_INC_PANEL_H
 
-// **************** NanaZip Modification Start ****************
-#undef GetCurrentTime
-
-#include <winrt/NanaZip.Modern.h>
-#include <winrt/Windows.Foundation.Collections.h>
-// **************** NanaZip Modification End ****************
-
 #include "../../../Common/MyWindows.h"
 
 #if defined(__MINGW32__) || defined(__MINGW64__)
@@ -290,7 +283,7 @@ struct CCopyToOptions
 
   CVirtFileSystem *VirtFileSystemSpec;
   // ISequentialOutStream *VirtFileSystem;
-
+  
   CCopyToOptions():
       streamMode(false),
       moveMode(false),
@@ -299,15 +292,12 @@ struct CCopyToOptions
       replaceAltStreamChars(false),
       showErrorMessages(false),
       NeedRegistryZone(true),
-      // **************** NanaZip Modification Start ****************
-      // ZoneIdMode(NExtract::NZoneIdMode::kNone),
-      ZoneIdMode(NExtract::NZoneIdMode::Default),
-      // **************** NanaZip Modification End ****************
+      ZoneIdMode(NExtract::NZoneIdMode::kNone),
       VirtFileSystemSpec(NULL)
       // , VirtFileSystem(NULL)
       {}
 };
-
+  
 
 
 struct COpenResult
@@ -384,10 +374,6 @@ private:
 
   CAppState *_appState;
 
-  // **************** NanaZip Modification Start ****************
-  void InitializeXamlAddressBar();
-  // **************** NanaZip Modification End ****************
-
   virtual bool OnCommand(unsigned code, unsigned itemID, LPARAM lParam, LRESULT &result) Z7_override;
   virtual LRESULT OnMessage(UINT message, WPARAM wParam, LPARAM lParam) Z7_override;
   virtual bool OnCreate(CREATESTRUCT *createStruct) Z7_override;
@@ -397,34 +383,20 @@ private:
 
   void AddComboBoxItem(const UString &name, int iconIndex, unsigned indent, bool addToList);
 
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-  // bool OnComboBoxCommand(UINT code, LPARAM param, LRESULT &result);
-  // **************** NanaZip Modification End ****************
-
+  bool OnComboBoxCommand(UINT code, LPARAM param, LRESULT &result);
+  
   #ifndef UNDER_CE
-
+  
   LRESULT OnNotifyComboBoxEnter(const UString &s);
-  // **************** NanaZip Modification Start ****************
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   bool OnNotifyComboBoxEndEdit(PNMCBEENDEDITW info, LRESULT &result);
   #ifndef _UNICODE
   bool OnNotifyComboBoxEndEdit(PNMCBEENDEDIT info, LRESULT &result);
   #endif
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-
-  void OnAddressBarQuerySubmitted(
-      winrt::NanaZip::Modern::AddressBar const&,
-      winrt::NanaZip::Modern::AddressBarQuerySubmittedEventArgs const&);
-  // **************** NanaZip Modification End ****************
 
   #endif
 
   bool OnNotifyReBar(LPNMHDR lParam, LRESULT &result);
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-  // bool OnNotifyComboBox(LPNMHDR lParam, LRESULT &result);
-  // **************** NanaZip Modification End ****************
+  bool OnNotifyComboBox(LPNMHDR lParam, LRESULT &result);
   void OnItemChanged(NMLISTVIEW *item);
   void OnNotifyActivateItems();
   bool OnNotifyList(LPNMHDR lParam, LRESULT &result);
@@ -442,7 +414,7 @@ private:
   void AddColumn(const CPropColumn &prop);
 
   void SetFocusedSelectedItem(int index, bool select);
-
+  
   void OnShiftSelectMessage();
   void OnArrowWithShift();
 
@@ -456,9 +428,6 @@ private:
 public:
   HWND _mainWindow;
 
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   NWindows::NControl::CReBar _headerReBar;
   NWindows::NControl::CToolBar _headerToolBar;
   NWindows::NControl::
@@ -468,38 +437,20 @@ public:
     CComboBoxEx
     #endif
     _headerComboBox;
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  // **************** NanaZip Modification End ****************
-
   UStringVector ComboBoxPaths;
   // CMyComboBox _headerComboBox;
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-  // CMyComboBoxEdit _comboBoxEdit;
-  // **************** NanaZip Modification End ****************
+  CMyComboBoxEdit _comboBoxEdit;
   NWindows::NControl::CStatusBar _statusBar;
   // NWindows::NControl::CStatusBar _statusBar2;
-
-  // **************** NanaZip Modification Start ****************
-  winrt::Windows::Foundation::Collections::IObservableVector<
-      winrt::NanaZip::Modern::AddressBarItem>
-      _items{ nullptr };
-
-  HWND _addressBarWindow{ nullptr };
-  winrt::NanaZip::Modern::AddressBar _addressBarControl{ nullptr };
-  HWND _statusBarWindow{ nullptr };
-  winrt::NanaZip::Modern::StatusBar _statusBarControl{ nullptr };
-  HIMAGELIST _sysImageList{ nullptr };
-  // **************** NanaZip Modification End ****************
 
   CBoolVector _selectedStatusVector;
   CSelectedState _selectedState;
 
   UString _currentFolderPrefix;
-
+  
   CObjectVector<CFolderLink> _parentFolders;
   NWindows::NDLL::CLibrary _library;
-
+  
   CMyComPtr<IFolderFolder> _folder;
   CBoolVector _isDirVector;
   CMyComPtr<IFolderCompare> _folderCompare;
@@ -518,13 +469,13 @@ public:
 
   UString _typeIDString;
   CListViewInfo _listViewInfo;
-
+  
   CPropColumns _columns;
   CPropColumns _visibleColumns;
-
+  
   CMyComPtr<IContextMenu> _sevenZipContextMenu;
   CMyComPtr<IContextMenu> _systemContextMenu;
-
+  
   void UpdateSelection();
   void SelectSpec(bool selectMode);
   void SelectByType(bool selectMode);
@@ -566,7 +517,7 @@ public:
     */
     return (UInt32)item.lParam;
   }
-
+  
   unsigned GetRealItemIndex(int indexInListView) const
   {
     /*
@@ -589,7 +540,7 @@ public:
   // UInt32 GetItem_Attrib(UInt32 itemIndex) const;
 
   bool GetItem_BoolProp(UInt32 itemIndex, PROPID propID) const;
-
+  
   bool IsItem_Deleted(unsigned itemIndex) const;
   bool IsItem_Folder(unsigned itemIndex) const;
   bool IsItem_AltStream(unsigned itemIndex) const;
@@ -614,10 +565,10 @@ public:
   HRESULT BindToPath(const UString &fullPath, const UString &arcFormat, COpenResult &openRes); // can be prefix
   HRESULT BindToPathAndRefresh(const UString &path);
   void OpenDrivesFolder();
-
+  
   void SetBookmark(unsigned index);
   void OpenBookmark(unsigned index);
-
+  
   void LoadFullPath();
   void LoadFullPathAndShow();
   void FoldersHistory();
@@ -694,23 +645,23 @@ public:
   HRESULT CreateShellContextMenu(
       const CRecordVector<UInt32> &operatedIndices,
       CMyComPtr<IContextMenu> &systemContextMenu);
-
+  
   void CreateSystemMenu(HMENU menu,
       bool showExtendedVerbs,
       const CRecordVector<UInt32> &operatedIndices,
       CMyComPtr<IContextMenu> &systemContextMenu);
-
+  
   void CreateSevenZipMenu(HMENU menu,
       bool showExtendedVerbs,
       const CRecordVector<UInt32> &operatedIndices,
       int firstDirIndex,
       CMyComPtr<IContextMenu> &sevenZipContextMenu);
-
+  
   void CreateFileMenu(HMENU menu,
       CMyComPtr<IContextMenu> &sevenZipContextMenu,
       CMyComPtr<IContextMenu> &systemContextMenu,
       bool programMenu);
-
+  
   void CreateFileMenu(HMENU menu);
   bool InvokePluginCommand(unsigned id);
   bool InvokePluginCommand(unsigned id, IContextMenu *sevenZipContextMenu,
@@ -722,7 +673,7 @@ public:
   void EditCopy();
   void EditPaste();
 
-
+ 
   // void SortItems(int index);
   void SortItemsWithPropID(PROPID propID);
 
@@ -734,7 +685,7 @@ public:
   void KillSelection();
 
   UString GetFolderTypeID() const;
-
+  
   bool IsFolderTypeEqTo(const char *s) const;
   bool IsRootFolder() const;
   bool IsFSFolder() const;
@@ -742,7 +693,7 @@ public:
   bool IsAltStreamsFolder() const;
   bool IsArcFolder() const;
   bool IsHashFolder() const;
-
+  
   /*
     c:\Dir
     Computer\
@@ -762,7 +713,7 @@ public:
   // bool IsFsOrDrivesFolder() const { return IsFSFolder() || IsFSDrivesFolder(); }
   bool IsDeviceDrivesPrefix() const { return _currentFolderPrefix.IsEqualTo("\\\\.\\"); }
   bool IsSuperDrivesPrefix() const { return _currentFolderPrefix.IsEqualTo("\\\\?\\"); }
-
+  
   /*
     c:\Dir
     Computer\
@@ -808,7 +759,7 @@ public:
 
     bool _processTimer;
     CPanel &_panel;
-
+   
     public:
 
     CDisableTimerProcessing(CPanel &panel): _panel(panel) { Disable(); }
@@ -830,7 +781,7 @@ public:
 
     bool _processTimer;
     CPanel *_panel;
-
+   
     public:
 
     CDisableTimerProcessing2(CPanel *panel): _processTimer(true), _panel(panel) { Disable(); }
@@ -889,7 +840,7 @@ public:
 
   HRESULT RefreshListCtrl();
 
-
+  
   // void MessageBox_Info(LPCWSTR message, LPCWSTR caption) const;
   // void MessageBox_Warning(LPCWSTR message) const;
   void MessageBox_Error_Caption(LPCWSTR message, LPCWSTR caption) const;
@@ -913,7 +864,7 @@ public:
 
   void OpenFolder(unsigned index);
   HRESULT OpenParentArchiveFolder();
-
+  
   HRESULT OpenAsArc(IInStream *inStream,
       const CTempFileInfo &tempFileInfo,
       const UString &virtualFilePath,
@@ -926,17 +877,17 @@ public:
       const UString &arcFormat
       // , bool showErrorMessage
       );
-
+  
   HRESULT OpenAsArc_Name(const UString &relPath, const UString &arcFormat
       // , bool showErrorMessage
       );
   HRESULT OpenAsArc_Index(unsigned index, const wchar_t *type /* = NULL */
       // , bool showErrorMessage
       );
-
+  
   void OpenItemInArchive(unsigned index, bool tryInternal, bool tryExternal,
       bool editMode, bool useEditor, const wchar_t *type = NULL);
-
+  
   HRESULT OnOpenItemChanged(UInt32 index, const wchar_t *fullFilePath, bool usePassword, const UString &password);
   LRESULT OnOpenItemChanged(LPARAM lParam);
 
@@ -962,7 +913,7 @@ public:
   {
     AutoRefresh_Mode = mode;
   }
-
+  
   void Post_Refresh_StatusBar();
   void Refresh_StatusBar();
 
@@ -1049,7 +1000,7 @@ struct CExitEventLauncher
   bool _needExit;
   unsigned _numActiveThreads;
   CRecordVector< ::CThread > _threads;
-
+    
   CExitEventLauncher()
   {
     _needExit = false;

@@ -47,11 +47,11 @@ public:
   CMyComPtr<IFolderOperations> FolderOperations;
   CMyComPtr<IProgress> UpdateCallback;
   CUpdateCallback100Imp *UpdateCallbackSpec;
-
+  
   CThreadFolderOperations(EFolderOpType opType): OpType(opType) {}
   HRESULT DoOperation(CPanel &panel, const UString &progressTitle, const UString &titleError);
 };
-
+  
 HRESULT CThreadFolderOperations::ProcessVirt()
 {
   NCOM::CComInitializer comInitializer;
@@ -88,10 +88,7 @@ HRESULT CThreadFolderOperations::DoOperation(CPanel &panel, const UString &progr
   }
 
   MainWindow = panel._mainWindow; // panel.GetParent()
-  // **************** NanaZip Modification Start ****************
-  // MainTitle = "7-Zip"; // LangString(IDS_APP_TITLE);
-  MainTitle = "NanaZip"; // LangString(IDS_APP_TITLE);
-  // **************** NanaZip Modification End ****************
+  MainTitle = "7-Zip"; // LangString(IDS_APP_TITLE);
   MainAddTitle = progressTitle + L' ';
 
   RINOK(Create(progressTitle, MainWindow))
@@ -218,7 +215,7 @@ Z7_DIAGNOSTIC_IGNORE_CAST_FUNCTION
     }
   }
   #endif
-
+ 
   // DeleteItemsInternal
 
   if (!CheckBeforeUpdate(IDS_ERROR_DELETING))
@@ -378,7 +375,7 @@ void CPanel::CreateFolder()
   UString newName;
   if (!Dlg_CreateFolder(GetParent(), newName))
     return;
-
+  
   if (!IsCorrectFsName(newName))
   {
     MessageBox_Error_HRESULT(E_INVALIDARG);
@@ -395,7 +392,7 @@ void CPanel::CreateFolder()
     }
     newName = correctName;
   }
-
+  
   HRESULT res;
   CDisableNotify disableNotify(*this);
   {
@@ -446,7 +443,7 @@ void CPanel::CreateFile()
     return;
 
   CDisableNotify disableNotify(*this);
-
+  
   UString newName = dlg.Value;
 
   if (IsFSFolder())

@@ -29,14 +29,14 @@ public:
   CRecordVector<UInt32> Indices;
   CExtractCallbackImp *ExtractCallbackSpec;
   CMyComPtr<IFolderOperationsExtractCallback> ExtractCallback;
-
+  
   CHashBundle Hash;
   // UString FirstFilePath;
 
   // HRESULT Result2;
 
   void ShowFinalResults(HWND hwnd);
-
+  
   CPanelCopyThread():
     ResultsWereShown(false),
     NeedShowRes(false),
@@ -54,7 +54,7 @@ void CPanelCopyThread::ShowFinalResults(HWND hwnd)
     ShowHashResults(Hash, hwnd);
   }
 }
-
+  
 void CPanelCopyThread::ProcessWasFinished_GuiVirt()
 {
   ShowFinalResults(*this);
@@ -202,7 +202,7 @@ HRESULT CPanel::CopyTo(CCopyToOptions &options,
     if (!options.testMode)
       return E_NOTIMPL;
   }
-
+  
   if (!filePaths)
   if (!_folderOperations)
   {
@@ -296,14 +296,14 @@ HRESULT CPanel::CopyTo(CCopyToOptions &options,
   }
 
   const UString progressWindowTitle ("7-Zip"); // LangString(IDS_APP_TITLE);
-
+  
   extracter.MainWindow = GetParent();
   extracter.MainTitle = progressWindowTitle;
   extracter.MainAddTitle = title + L' ';
-
+    
   extracter.ExtractCallbackSpec->OverwriteMode = NExtract::NOverwriteMode::kAsk;
   extracter.ExtractCallbackSpec->Init();
-
+  
   extracter.CopyFrom_Paths = filePaths;
   if (!filePaths)
   {
@@ -313,9 +313,9 @@ HRESULT CPanel::CopyTo(CCopyToOptions &options,
 
   extracter.ExtractCallbackSpec->PasswordIsDefined = usePassword;
   extracter.ExtractCallbackSpec->Password = password;
-
+  
   RINOK(extracter.Create(title, GetParent()))
-
+  
 
   if (messages)
     *messages = extracter.Sync.Messages;
@@ -332,7 +332,7 @@ HRESULT CPanel::CopyTo(CCopyToOptions &options,
   extracter.ShowFinalResults(_window);
 
   }
-
+  
   RefreshTitleAlways();
   return res;
 }
@@ -349,7 +349,7 @@ struct CThreadUpdate
   CUpdateCallback100Imp *UpdateCallbackSpec;
   HRESULT Result;
   bool MoveMode;
-
+  
   void Process()
   {
     try
@@ -396,15 +396,12 @@ HRESULT CPanel::CopyFrom(bool moveMode, const UString &folderPrefix, const UStri
   updater.UpdateCallbackSpec->ProgressDialog = &updater.ProgressDialog;
 
   const UString title = LangString(IDS_COPYING);
-  // **************** NanaZip Modification Start ****************
-  // const UString progressWindowTitle ("7-Zip"); // LangString(IDS_APP_TITLE);
-  const UString progressWindowTitle ("NanaZip"); // LangString(IDS_APP_TITLE);
-  // **************** NanaZip Modification End ****************
+  const UString progressWindowTitle ("7-Zip"); // LangString(IDS_APP_TITLE);
 
   updater.ProgressDialog.MainWindow = GetParent();
   updater.ProgressDialog.MainTitle = progressWindowTitle;
   updater.ProgressDialog.MainAddTitle = title + L' ';
-
+  
   {
     if (!_parentFolders.IsEmpty())
     {

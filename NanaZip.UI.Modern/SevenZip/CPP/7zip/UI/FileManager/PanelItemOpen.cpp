@@ -141,7 +141,7 @@ public:
         ProgNames.Add(g_Progs[i].Prog);
       }
   }
-
+  
   bool IsFromList(const UString &progName) const
   {
     FOR_VECTOR (i, ProgNames)
@@ -191,7 +191,7 @@ static void My_GetProcessFileName_2(HANDLE hProcess, UString &path)
   path.Empty();
   const unsigned maxPath = 1024;
   WCHAR temp[maxPath + 1];
-
+  
   const char *func_name = "GetModuleFileNameExW";
   Func_GetModuleFileNameExW my_func = (Func_GetModuleFileNameExW)
     ::GetProcAddress(::GetModuleHandleA("kernel32.dll"), func_name);
@@ -220,12 +220,12 @@ static void My_GetProcessFileName(HANDLE hProcess, UString &path)
   path.Empty();
   const unsigned maxPath = 1024;
   WCHAR temp[maxPath + 1];
-
+  
   const char *func_name =
       "GetProcessImageFileNameW";
   Func_GetProcessImageFileNameW my_func = Z7_GET_PROC_ADDRESS(
   Func_GetProcessImageFileNameW, ::GetModuleHandleA("kernel32.dll"), func_name);
-
+  
   if (!my_func)
   {
     if (!g_Psapi_dll_module)
@@ -234,7 +234,7 @@ static void My_GetProcessFileName(HANDLE hProcess, UString &path)
       my_func = Z7_GET_PROC_ADDRESS(
         Func_GetProcessImageFileNameW, g_Psapi_dll_module, func_name);
   }
-
+  
   if (my_func)
   {
     const DWORD num =
@@ -299,7 +299,7 @@ public:
   // CChildProcesses(): ProgsWereUsed(false) {}
   ~CChildProcesses() { CloseAll(); }
   void DisableWait(unsigned index) { NeedWait[index] = false; }
-
+  
   void CloseAll()
   {
     FOR_VECTOR (i, Handles)
@@ -332,7 +332,7 @@ public:
       if (id != 0)
         _ids.AddToUniqueSorted(id);
     }
-
+    
     My_GetProcessFileName(h, Path);
     DEBUG_PRINT_W(Path);
 
@@ -364,12 +364,12 @@ public:
     for (;;)
     {
       bool wasAdded = false;
-
+      
       FOR_VECTOR (i, sps)
       {
         const CSnapshotProcess &sp = sps[i];
         const DWORD id = sp.Id;
-
+        
         if (id == currentProcessId)
           continue;
         if (_ids.FindInSorted(id) >= 0)
@@ -377,13 +377,13 @@ public:
 
         bool isSameName = false;
         const UString &name = sp.Name;
-
+        
         if (needFindProcessByPath)
           isSameName = mainName.IsEqualTo_NoCase(name);
 
         bool needAdd = false;
         // bool isFromProgs = false;
-
+        
         if (isSameName || _ids.FindInSorted(sp.ParentId) >= 0)
           needAdd = true;
         /*
@@ -412,12 +412,12 @@ public:
           }
         }
       }
-
+      
       if (!wasAdded)
         break;
     }
   }
-
+  
   #endif
 };
 
@@ -431,7 +431,7 @@ struct CTmpProcessInfo: public CTempFileInfo
   UString Password;
 
   bool ReadOnly;
-
+  
   CTmpProcessInfo(): UsePassword(false), ReadOnly(false) {}
 };
 
@@ -462,7 +462,7 @@ HRESULT CPanel::OpenAsArc(IInStream *inStream,
   openRes.Encrypted = false;
   CFolderLink folderLink;
   (CTempFileInfo &)folderLink = tempFileInfo;
-
+  
   if (inStream)
     folderLink.IsVirtual = true;
   else
@@ -485,7 +485,7 @@ HRESULT CPanel::OpenAsArc(IInStream *inStream,
   openRes.ErrorMessage = ffp.ErrorMessage;
 
   RINOK(res)
-
+ 
   folderLink.Password = ffp.Password;
   folderLink.UsePassword = ffp.Encrypted;
 
@@ -493,7 +493,7 @@ HRESULT CPanel::OpenAsArc(IInStream *inStream,
     folderLink.ParentFolderPath = GetFolderPath(_folder);
   else
     folderLink.ParentFolderPath = _currentFolderPrefix;
-
+  
   if (!_parentFolders.IsEmpty())
     folderLink.ParentFolder = _folder;
 
@@ -508,7 +508,7 @@ HRESULT CPanel::OpenAsArc(IInStream *inStream,
   _flatMode = _flatModeForArc;
 
   _thereAreDeletedItems = false;
-
+  
   if (!openRes.ErrorMessage.IsEmpty())
     MessageBox_Error(openRes.ErrorMessage);
   /*
@@ -536,7 +536,7 @@ HRESULT CPanel::OpenAsArc_Msg(IInStream *inStream,
   COpenResult opRes;
 
   HRESULT res = OpenAsArc(inStream, tempFileInfo, virtualFilePath, arcFormat, opRes);
-
+  
   if (res == S_OK)
     return res;
   if (res == E_ABORT)
@@ -645,7 +645,7 @@ static const char * const kStartExtensions =
   " dwf"
 
   " flv swf"
-
+  
   " epub"
   " odt ods"
   " wb3"
@@ -700,7 +700,7 @@ static WRes StartAppWithParams(const UString &cmd, const UStringVector &paramVec
   UString prg;
 
   SplitCmdLineSmart(cmd, prg, param);
-
+  
   param.Trim();
 
   // int pos = params.Find(L"%1");
@@ -711,7 +711,7 @@ static WRes StartAppWithParams(const UString &cmd, const UStringVector &paramVec
       param.Add_Space();
     param += GetQuotedString(paramVector[i]);
   }
-
+  
   return process.Create(prg, param, NULL);
 }
 
@@ -747,7 +747,7 @@ static HRESULT StartEditApplication(const UString &path, bool useEditor, HWND wi
 void CApp::DiffFiles()
 {
   const CPanel &panel = GetFocusedPanel();
-
+  
   if (!panel.Is_IO_FS_Folder())
   {
     panel.MessageBox_Error_UnsupportOperation();
@@ -866,7 +866,7 @@ bool CPanel::IsVirus_Message(const UString &name)
   bool isVirus = false;
   bool isSpaceError = false;
   name2 = name;
-
+  
   if (name2.Find(cRLO) >= 0)
   {
     const UString badString(cRLO);
@@ -908,12 +908,12 @@ bool CPanel::IsVirus_Message(const UString &name)
     }
   }
   #endif
-
+  
   if (!isVirus)
     return false;
 
   UString s = LangString(IDS_VIRUS);
-
+  
   if (!isSpaceError)
   {
     const int pos1 = s.Find(L'(');
@@ -945,7 +945,7 @@ void CPanel::OpenItem(unsigned index, bool tryInternal, bool tryExternal, const 
 {
   CDisableTimerProcessing disableTimerProcessing(*this);
   const UString name = GetItemRelPath2(index);
-
+  
   if (tryExternal)
     if (IsVirus_Message(name))
       return;
@@ -976,7 +976,7 @@ void CPanel::OpenItem(unsigned index, bool tryInternal, bool tryExternal, const 
         return;
       }
     }
-
+  
   if (tryExternal)
   {
     // SetCurrentDirectory opens HANDLE to folder!!!
@@ -996,12 +996,12 @@ public:
   CMyComPtr<IProgress> UpdateCallback;
   CUpdateCallback100Imp *UpdateCallbackSpec;
 };
-
+  
 HRESULT CThreadCopyFrom::ProcessVirt()
 {
   return FolderOperations->CopyFromFile(ItemIndex, FullPath, UpdateCallback);
 }
-
+      
 HRESULT CPanel::OnOpenItemChanged(UInt32 index, const wchar_t *fullFilePath,
     bool usePassword, const UString &password)
 {
@@ -1038,11 +1038,11 @@ LRESULT CPanel::OnOpenItemChanged(LPARAM lParam)
   UInt32 fileIndex = tpi.FileIndex;
   UInt32 numItems;
   _folder->GetNumberOfItems(&numItems);
-
+  
   // This code is not 100% OK for cases when there are several files with
   // tpi.RelPath name and there are changes in archive before update.
   // So tpi.FileIndex can point to another file.
-
+ 
   if (fileIndex >= numItems || GetItemRelPath(fileIndex) != tpi.RelPath)
   {
     UInt32 i;
@@ -1079,7 +1079,7 @@ void CExitEventLauncher::Exit(bool hardExit)
 
   if (_numActiveThreads == 0)
     return;
-
+  
   FOR_VECTOR (i, _threads)
   {
     ::CThread &th = _threads[i];
@@ -1136,7 +1136,7 @@ static THREAD_FUNC_DECL MyThreadFunction(void *param)
   {
     CRecordVector<HANDLE> handles;
     CUIntVector indices;
-
+    
     FOR_VECTOR (i, processes.Handles)
     {
       if (handles.Size() > 60)
@@ -1147,7 +1147,7 @@ static THREAD_FUNC_DECL MyThreadFunction(void *param)
         indices.Add(i);
       }
     }
-
+    
     bool needFindProcessByPath = false;
 
     if (handles.IsEmpty())
@@ -1158,11 +1158,11 @@ static THREAD_FUNC_DECL MyThreadFunction(void *param)
     else
     {
       handles.Add(g_ExitEventLauncher._exitEvent);
-
+      
       DWORD waitResult = WaitForMultiObj_Any_Infinite(handles.Size(), handles.ConstData());
-
+      
       waitResult -= WAIT_OBJECT_0;
-
+      
       if (waitResult >= handles.Size() - 1)
       {
         processes.CloseAll();
@@ -1196,15 +1196,15 @@ static THREAD_FUNC_DECL MyThreadFunction(void *param)
             if (tpi->WasChanged_from_TempFileInfo(newFileInfo))
               needFindProcessByPath = false;
         }
-
+        
         DEBUG_PRINT_NUM(" -- firstPass -- time = ", curTime)
       }
-
+      
       processes.DisableWait(indices[(unsigned)waitResult]);
     }
 
     firstPass = false;
-
+    
     // Sleep(300);
     #ifndef UNDER_CE
     processes.Update(needFindProcessByPath /* , progs */);
@@ -1227,7 +1227,7 @@ static THREAD_FUNC_DECL MyThreadFunction(void *param)
   for (;;)
   {
     NFind::CFileInfo newFileInfo;
-
+    
     if (!newFileInfo.Find(tpi->FilePath))
       break;
 
@@ -1260,11 +1260,11 @@ static THREAD_FUNC_DECL MyThreadFunction(void *param)
           break;
         }
       }
-
+    
       if (!isComplexMode)
         break;
     }
-
+    
     // DEBUG_PRINT("WaitForSingleObject");
     DWORD waitResult = ::WaitForSingleObject(g_ExitEventLauncher._exitEvent, INFINITE);
     // DEBUG_PRINT("---");
@@ -1284,15 +1284,9 @@ static THREAD_FUNC_DECL MyThreadFunction(void *param)
     {
       DEBUG_PRINT("Delete Temp file");
       tpi->DeleteDirAndFile();
-      // **************** NanaZip Modification Start ****************
-      // If opening a excutable file, we delete all the files in the temp folder after closing it, not just the executable file.
-      if (tpi->isExecutable) {
-          NWindows::NFile::NDir::RemoveDirWithSubItems(tpi->FolderPath);
-      }
-      // **************** NanaZip Modification End ****************
     }
   }
-
+  
   return 0;
 }
 
@@ -1463,7 +1457,7 @@ void CPanel::OpenItemInArchive(unsigned index, bool tryInternal, bool tryExterna
 
   const UString name = GetItemName(index);
   const UString relPath = GetItemRelPath(index);
-
+  
   if (tryExternal)
     if (IsVirus_Message(name))
       return;
@@ -1484,7 +1478,7 @@ void CPanel::OpenItemInArchive(unsigned index, bool tryInternal, bool tryExterna
     MessageBox_LastError();
     return;
   }
-
+  
   FString tempDir = tempDirectory.GetPath();
   FString tempDirNorm = tempDir;
   NName::NormalizeDirPathPrefix(tempDirNorm);
@@ -1532,22 +1526,7 @@ void CPanel::OpenItemInArchive(unsigned index, bool tryInternal, bool tryExterna
 
 
   CRecordVector<UInt32> indices;
-  // **************** NanaZip Modification Start ****************
-  // *Special handling for exe files: We extract all files to temp dir and run exe from there.
-  // indices.Add(index);
-  if (FindExt(kExeExtensions, name))
-  {
-      UInt32 numItems = 0;
-      _folder->GetNumberOfItems(&numItems);
-
-      for (UInt32 i = 0; i < numItems; ++i)
-          {
-              indices.Add((int) i );
-          }
-
-  }
-  else indices.Add(index);
-  // **************** NanaZip Modification End ****************
+  indices.Add(index);
 
   UStringVector messages;
 
@@ -1592,7 +1571,7 @@ void CPanel::OpenItemInArchive(unsigned index, bool tryInternal, bool tryExterna
     options.ZoneIdMode = NExtract::NZoneIdMode::kAll;
     options.NeedRegistryZone = false;
   }
-
+  
   if (tryAsArchive)
   {
     // actually we want to get sum: size of main file plus sizes of altStreams.
@@ -1770,14 +1749,7 @@ void CPanel::OpenItemInArchive(unsigned index, bool tryInternal, bool tryExterna
   tpi->FullPathFolderPrefix = _currentFolderPrefix;
   tpi->FileIndex = index;
   tpi->RelPath = relPath;
-  // **************** NanaZip Modification Start ****************
-  // toggle auto extract on opening exe
-  if (FindExt(kExeExtensions, name))
-  {
-      tpi->isExecutable =true;
-  }
-  // **************** NanaZip Modification End ****************
-
+  
   if ((HANDLE)process)
     tpi->Processes.SetMainProcess(process.Detach());
 

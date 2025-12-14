@@ -33,12 +33,6 @@
 
 #include "PropertyNameRes.h"
 
-// **************** NanaZip Modification Start ****************
-#include <Mile.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.Input.h>
-// **************** NanaZip Modification End ****************
-
 using namespace NWindows;
 using namespace NControl;
 
@@ -54,11 +48,6 @@ static DWORD kStyles[4] = { LVS_ICON, LVS_SMALLICON, LVS_LIST, LVS_REPORT };
 // static const int kCreateFolderID = 101;
 
 extern HINSTANCE g_hInstance;
-
-// **************** NanaZip Modification Start ****************
-static const int AddressBarHeight = 32;
-static const int StatusBarHeight = 32;
-// **************** NanaZip Modification End ****************
 
 void CPanel::ReleasePanel()
 {
@@ -80,10 +69,7 @@ HWND CPanel::GetParent() const
   return h ? h : _mainWindow;
 }
 
-// **************** NanaZip Modification Start ****************
-// #define kClassName L"7-Zip::Panel"
-#define kClassName L"NanaZip::Panel"
-// **************** NanaZip Modification End ****************
+#define kClassName L"7-Zip::Panel"
 
 
 HRESULT CPanel::Create(HWND mainWindow, HWND parentWindow, UINT id,
@@ -102,13 +88,8 @@ HRESULT CPanel::Create(HWND mainWindow, HWND parentWindow, UINT id,
   _appState = appState;
   // _index = index;
   _baseID = id;
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   _comboBoxID = _baseID + 3;
   _statusBarID = _comboBoxID + 1;
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  // **************** NanaZip Modification End ****************
 
   UString cfp = currentFolderPrefix;
 
@@ -398,147 +379,6 @@ LRESULT CMyComboBoxEdit::OnMessage(UINT message, WPARAM wParam, LPARAM lParam)
   #define my_compatib_REBARBANDINFO_size  sizeof(REBARBANDINFO)
 #endif
 
-void CPanel::InitializeXamlAddressBar()
-{
-    _addressBarControl = winrt::NanaZip::Modern::AddressBar{};
-    _addressBarWindow = ::CreateWindowEx(
-        WS_EX_NOREDIRECTIONBITMAP,
-        L"Mile.Xaml.ContentWindow",
-        nullptr,
-        WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-        0,
-        0,
-        0,
-        0,
-        *this,
-        nullptr,
-        nullptr,
-        winrt::get_abi(_addressBarControl)
-    );
-
-    ::SetWindowSubclass(
-        _addressBarWindow,
-        [](
-            _In_ HWND hWnd,
-            _In_ UINT uMsg,
-            _In_ WPARAM wParam,
-            _In_ LPARAM lParam,
-            _In_ UINT_PTR uIdSubclass,
-            _In_ DWORD_PTR dwRefData) -> LRESULT
-        {
-            UNREFERENCED_PARAMETER(uIdSubclass);
-            UNREFERENCED_PARAMETER(dwRefData);
-
-            switch (uMsg)
-            {
-            case WM_ERASEBKGND:
-            {
-                ::RemovePropW(hWnd, L"BackgroundFallbackColor");
-                break;
-            }
-            default:
-                break;
-            }
-
-            return ::DefSubclassProc(
-                hWnd,
-                uMsg,
-                wParam,
-                lParam);
-        },
-        0,
-        0);
-
-    _sysImageList = GetSysImageList(true);
-
-    _addressBarControl.UpButtonClicked(
-        [this](auto&&, auto&&)
-        {
-            this->OpenParentFolder();
-            this->SetFocusToList();
-        });
-
-    _addressBarControl.QuerySubmitted({ this, &CPanel::OnAddressBarQuerySubmitted });
-
-    _addressBarControl.GotFocus(
-        [&](auto&&, auto&&)
-        {
-            _panelCallback->PanelWasFocused();
-        }
-    );
-
-    _items =
-        winrt::single_threaded_observable_vector<
-        winrt::NanaZip::Modern::AddressBarItem>();
-    _addressBarControl.ItemsSource(_items);
-    _addressBarControl.DropDownOpened({ this, &CPanel::OnDropDownOpened });
-
-    _addressBarControl.KeyUp(
-        [&]
-        (
-            auto&&,
-            winrt::Windows::UI::Xaml::Input::KeyRoutedEventArgs
-            const& args
-        )
-        {
-            if (args.Key() == winrt::Windows::System::VirtualKey::Escape)
-            {
-                _addressBarControl.Text(_currentFolderPrefix.Ptr());
-                PostMsg(kSetFocusToListView);
-            }
-        }
-    );
-
-    _statusBarControl = winrt::NanaZip::Modern::StatusBar{};
-    _statusBarWindow = ::CreateWindowEx(
-        WS_EX_NOREDIRECTIONBITMAP,
-        L"Mile.Xaml.ContentWindow",
-        nullptr,
-        WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-        0,
-        0,
-        0,
-        0,
-        *this,
-        nullptr,
-        nullptr,
-        winrt::get_abi(_statusBarControl)
-    );
-
-    ::SetWindowSubclass(
-        _statusBarWindow,
-        [](
-            _In_ HWND hWnd,
-            _In_ UINT uMsg,
-            _In_ WPARAM wParam,
-            _In_ LPARAM lParam,
-            _In_ UINT_PTR uIdSubclass,
-            _In_ DWORD_PTR dwRefData) -> LRESULT
-        {
-            UNREFERENCED_PARAMETER(uIdSubclass);
-            UNREFERENCED_PARAMETER(dwRefData);
-
-            switch (uMsg)
-            {
-            case WM_ERASEBKGND:
-            {
-                ::RemovePropW(hWnd, L"BackgroundFallbackColor");
-                break;
-            }
-            default:
-                break;
-            }
-
-            return ::DefSubclassProc(
-                hWnd,
-                uMsg,
-                wParam,
-                lParam);
-        },
-        0,
-        0);
-}
-
 
 bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
 {
@@ -593,7 +433,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
   _listView.Show(SW_SHOW);
   _listView.InvalidateRect(NULL, true);
   _listView.Update();
-
+  
   // Ensure that the common control DLL is loaded.
   INITCOMMONCONTROLSEX icex;
 
@@ -609,9 +449,6 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
     // {VIEW_NEWFOLDER, kCreateFolderID, TBSTATE_ENABLED, BTNS_BUTTON, 0L, 0},
   };
 
-  // **************** NanaZip Modification Start ****************
-  // XAML address bar.
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
 #ifdef Z7_USE_DYN_ComCtl32Version
   if (g_ComCtl32Version >= MAKELONG(71, 4))
 #endif
@@ -619,7 +456,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
     icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
     icex.dwICC  = ICC_COOL_CLASSES | ICC_BAR_CLASSES;
     InitCommonControlsEx(&icex);
-
+    
     // if there is no CCS_NOPARENTALIGN, there is space of some pixels after rebar (Incorrect GetWindowRect ?)
 
     _headerReBar.Attach(::CreateWindowEx(WS_EX_TOOLWINDOW,
@@ -661,7 +498,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
   icex.dwICC = ICC_USEREX_CLASSES;
   InitCommonControlsEx(&icex);
   #endif
-
+  
   _headerComboBox.CreateEx(0,
       #ifdef UNDER_CE
       WC_COMBOBOXW
@@ -707,13 +544,13 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
     rbi.fMask  = 0;
     rbi.himl   = (HIMAGELIST)NULL;
     _headerReBar.SetBarInfo(&rbi);
-
+    
     // Send the TB_BUTTONSTRUCTSIZE message, which is required for
     // backward compatibility.
     // _headerToolBar.SendMessage(TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
     SIZE size;
     _headerToolBar.GetMaxSize(&size);
-
+    
     REBARBANDINFO rbBand;
     memset(&rbBand, 0, sizeof(rbBand));
     // rbBand.cbSize = sizeof(rbBand);  // for debug
@@ -744,9 +581,6 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
   const int sizes[] = {220, 320, 420, -1};
   _statusBar.SetParts(4, sizes);
   // _statusBar2.SetParts(5, sizes);
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  InitializeXamlAddressBar();
-  // **************** NanaZip Modification End ****************
 
   /*
   RECT rect;
@@ -758,7 +592,7 @@ bool CPanel::OnCreate(CREATESTRUCT * /* createStruct */)
 
   // InitListCtrl();
   RefreshListCtrl();
-
+  
   return true;
 }
 
@@ -775,9 +609,6 @@ void CPanel::ChangeWindowSize(int xSize, int ySize)
   int kHeaderSize;
   int kStatusBarSize;
   // int kStatusBar2Size;
-
-  // **************** NanaZip Modification Start ****************
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   RECT rect;
   if (_headerReBar)
     _headerReBar.GetWindowRect(&rect);
@@ -788,19 +619,12 @@ void CPanel::ChangeWindowSize(int xSize, int ySize)
 
   _statusBar.GetWindowRect(&rect);
   kStatusBarSize = RECT_SIZE_Y(rect);
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  kHeaderSize = MulDiv(AddressBarHeight, ::GetDpiForWindow(*this), USER_DEFAULT_SCREEN_DPI);
-  kStatusBarSize = MulDiv(StatusBarHeight, ::GetDpiForWindow(*this), USER_DEFAULT_SCREEN_DPI);
-// **************** NanaZip Modification End ****************
-
+  
   // _statusBar2.GetWindowRect(&rect);
   // kStatusBar2Size = RECT_SIZE_Y(rect);
-
+ 
   int yListViewSize = MyMax(ySize - kHeaderSize - kStatusBarSize, 0);
   const int kStartXPos = 32;
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   if (_headerReBar)
   {
   }
@@ -810,25 +634,8 @@ void CPanel::ChangeWindowSize(int xSize, int ySize)
     _headerComboBox.Move(kStartXPos, 2,
         MyMax(xSize - kStartXPos - 10, kStartXPos), 0);
   }
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  // **************** NanaZip Modification End ****************
-
   _listView.Move(0, kHeaderSize, xSize, yListViewSize);
-  // **************** NanaZip Modification Start ****************
-  // _statusBar.Move(0, kHeaderSize + yListViewSize, xSize, kStatusBarSize);
-  if (_statusBarWindow)
-  {
-      ::SetWindowPos(
-          _statusBarWindow,
-          nullptr,
-          0,
-          kHeaderSize + yListViewSize,
-          xSize,
-          kStatusBarSize,
-          SWP_SHOWWINDOW
-      );
-  }
-  // **************** NanaZip Modification End ****************
+  _statusBar.Move(0, kHeaderSize + yListViewSize, xSize, kStatusBarSize);
   // _statusBar2.MoveWindow(0, kHeaderSize + yListViewSize + kStatusBarSize, xSize, kStatusBar2Size);
   // _statusBar.MoveWindow(0, 100, xSize, kStatusBarSize);
   // _statusBar2.MoveWindow(0, 200, xSize, kStatusBar2Size);
@@ -838,27 +645,8 @@ bool CPanel::OnSize(WPARAM /* wParam */, int xSize, int ySize)
 {
   if (!(HWND)*this)
     return true;
-
-  // **************** NanaZip Modification Start ****************
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   if (_headerReBar)
     _headerReBar.Move(0, 0, xSize, 0);
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  if (_addressBarWindow)
-  {
-      int ControlDpi = ::GetDpiForWindow(_addressBarWindow);
-      ::SetWindowPos(
-          _addressBarWindow,
-          nullptr,
-          0,
-          0,
-          xSize,
-          ::MulDiv(AddressBarHeight, ControlDpi, USER_DEFAULT_SCREEN_DPI),
-          SWP_SHOWWINDOW
-      );
-  }
-  // **************** NanaZip Modification End ****************
-
   ChangeWindowSize(xSize, ySize);
   return true;
 }
@@ -919,15 +707,10 @@ bool CPanel::OnNotify(UINT /* controlID */, LPNMHDR header, LRESULT &result)
   if (!_processNotify)
     return false;
 
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   if (header->hwndFrom == _headerComboBox)
     return OnNotifyComboBox(header, result);
   else if (header->hwndFrom == _headerReBar)
     return OnNotifyReBar(header, result);
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  // **************** NanaZip Modification End ****************
   else if (header->hwndFrom == _listView)
     return OnNotifyList(header, result);
   else if (::GetParent(header->hwndFrom) == _listView)
@@ -957,16 +740,11 @@ bool CPanel::OnCommand(unsigned code, unsigned itemID, LPARAM lParam, LRESULT &r
     return true;
   }
   */
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   if (itemID == _comboBoxID)
   {
     if (OnComboBoxCommand(code, lParam, result))
       return true;
   }
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  // **************** NanaZip Modification End ****************
   return CWindow2::OnCommand(code, itemID, lParam, result);
 }
 
@@ -983,10 +761,7 @@ void CPanel::MessageBox_Error_Caption(LPCWSTR message, LPCWSTR caption) const
   { ::MessageBoxW((HWND)*this, message, caption, MB_OK | MB_ICONSTOP); }
 
 void CPanel::MessageBox_Error(LPCWSTR message) const
-  // **************** NanaZip Modification Start ****************
-  // { MessageBox_Error_Caption(message, L"7-Zip"); }
-  { MessageBox_Error_Caption(message, L"NanaZip"); }
-  // **************** NanaZip Modification End ****************
+  { MessageBox_Error_Caption(message, L"7-Zip"); }
 
 static UString ErrorHResult_To_Message(HRESULT errorCode)
 {
@@ -1001,10 +776,7 @@ void CPanel::MessageBox_Error_HRESULT_Caption(HRESULT errorCode, LPCWSTR caption
 }
 
 void CPanel::MessageBox_Error_HRESULT(HRESULT errorCode) const
-  // **************** NanaZip Modification Start ****************
-  // { MessageBox_Error_HRESULT_Caption(errorCode, L"7-Zip"); }
-  { MessageBox_Error_HRESULT_Caption(errorCode, L"NanaZip"); }
-  // **************** NanaZip Modification End ****************
+  { MessageBox_Error_HRESULT_Caption(errorCode, L"7-Zip"); }
 
 void CPanel::MessageBox_Error_2Lines_Message_HRESULT(LPCWSTR message, HRESULT errorCode) const
 {
@@ -1018,10 +790,7 @@ void CPanel::MessageBox_LastError(LPCWSTR caption) const
   { MessageBox_Error_HRESULT_Caption(GetLastError_noZero_HRESULT(), caption); }
 
 void CPanel::MessageBox_LastError() const
-  // **************** NanaZip Modification Start ****************
-  // { MessageBox_LastError(L"7-Zip"); }
-  { MessageBox_LastError(L"NanaZip"); }
-  // **************** NanaZip Modification End ****************
+  { MessageBox_LastError(L"7-Zip"); }
 
 void CPanel::MessageBox_Error_LangID(UINT resourceID) const
   { MessageBox_Error(LangString(resourceID)); }
@@ -1042,13 +811,8 @@ void CPanel::SetFocusToLastRememberedItem()
 {
   if (_lastFocusedIsList)
     SetFocusToList();
-  // **************** NanaZip Modification Start ****************
-  // Removed from NanaZip.
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
   else
     _headerComboBox.SetFocus();
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  // **************** NanaZip Modification End ****************
 }
 
 UString CPanel::GetFolderTypeID() const
@@ -1073,10 +837,7 @@ bool CPanel::IsFSDrivesFolder() const { return IsFolderTypeEqTo("FSDrives"); }
 bool CPanel::IsAltStreamsFolder() const { return IsFolderTypeEqTo("AltStreamsFolder"); }
 bool CPanel::IsArcFolder() const
 {
-  // **************** NanaZip Modification Start ****************
-  // return GetFolderTypeID().IsPrefixedBy_Ascii_NoCase("7-Zip");
-  return GetFolderTypeID().IsPrefixedBy_Ascii_NoCase("NanaZip");
-  // **************** NanaZip Modification End ****************
+  return GetFolderTypeID().IsPrefixedBy_Ascii_NoCase("7-Zip");
 }
 
 bool CPanel::IsHashFolder() const
@@ -1266,7 +1027,7 @@ void CPanel::ExtractArchives()
   else
     outFolder.Add_Char('*');
   outFolder.Add_PathSepar();
-
+  
   CContextMenuInfo ci;
   ci.Load();
 
@@ -1276,44 +1037,6 @@ void CPanel::ExtractArchives()
       , ci.WriteZone
       );
 }
-
-// **************** NanaZip Modification Start ****************
-void CPanel::ExtractFromArchive()
-{
-  if (!_parentFolders.IsEmpty())
-  {
-    _panelCallback->OnCopy(false, false);
-    return;
-  }
-  CRecordVector<UInt32> indices;
-  Get_ItemIndices_Operated(indices);
-  if (indices.IsEmpty() || FindDir_InOperatedList(indices) != -1)
-  {
-    MessageBox_Error_LangID(IDS_SELECT_FILES);
-    return;
-  }
-
-  UString path = GetFsPath();
-  if (IsPathSepar(path.Back()))
-      path.DeleteBack();
-  if (path != _parentFolders[0].VirtualPath) {
-    _panelCallback->OnCopy(false, false);
-    return;
-  }
-  UStringVector paths;
-  paths.Add(path);
-  UString outFolder = GetSubFolderNameForExtract2(path);
-
-  CContextMenuInfo ci;
-  ci.Load();
-
-  ::ExtractArchives(paths, outFolder
-      , true   // showDialog
-      , false  // elimDup
-      , ci.WriteZone
-      );
-}
-// **************** NanaZip Modification End ****************
 
 /*
 static void AddValuePair(UINT resourceID, UInt64 value, UString &s)
@@ -1418,20 +1141,20 @@ void CPanel::TestArchives()
       return;
 
     extracter.Indices = indices;
-
+    
     const UString title = LangString(IDS_PROGRESS_TESTING);
-
+    
     extracter.ProgressDialog.CompressingMode = false;
     extracter.ProgressDialog.MainWindow = GetParent();
     extracter.ProgressDialog.MainTitle = "7-Zip"; // LangString(IDS_APP_TITLE);
     extracter.ProgressDialog.MainAddTitle = title + L' ';
-
+    
     extracter.ExtractCallbackSpec->OverwriteMode = NExtract::NOverwriteMode::kAskBefore;
     extracter.ExtractCallbackSpec->Init();
-
+    
     if (extracter.Create(title, GetParent()) != S_OK)
       return;
-
+    
     }
     RefreshTitleAlways();
     return;

@@ -73,25 +73,13 @@ static void Print_Point(const char *name, DWORD keyState, const POINTL &pt, DWOR
 #endif
 
 
-// **************** NanaZip Modification Start ****************
-// Removed from NanaZip.
-// #define kTempDirPrefix  FTEXT("7zE")
-// **************** NanaZip Modification End ****************
+#define kTempDirPrefix  FTEXT("7zE")
 
-// **************** NanaZip Modification Start ****************
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
 // all versions: k_Format_7zip_SetTargetFolder format to transfer folder path from target to source
 static LPCTSTR const k_Format_7zip_SetTargetFolder = TEXT("7-Zip::SetTargetFolder");
 // new v23 formats:
 static LPCTSTR const k_Format_7zip_SetTransfer = TEXT("7-Zip::SetTransfer");
 static LPCTSTR const k_Format_7zip_GetTransfer = TEXT("7-Zip::GetTransfer");
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-// all versions: k_Format_7zip_SetTargetFolder format to transfer folder path from target to source
-static LPCTSTR const k_Format_7zip_SetTargetFolder = TEXT("NanaZip::SetTargetFolder");
-// new v23 formats:
-static LPCTSTR const k_Format_7zip_SetTransfer = TEXT("NanaZip::SetTransfer");
-static LPCTSTR const k_Format_7zip_GetTransfer = TEXT("NanaZip::GetTransfer");
-// **************** NanaZip Modification End ****************
 
 /*
   Win10: clipboard formats.
@@ -297,7 +285,7 @@ struct CTargetTransferInfo
 {
   UInt32 Flags;
   UInt32 FuncType;
-
+  
   UInt32 KeyState;
   UInt32 OkEffects;
   POINTL Point;
@@ -391,7 +379,7 @@ static const CCmdLangPair g_Pairs[] =
   { k_AddToArc   | k_MenuFlag_Copy,  IDS_CONTEXT_COMPRESS },
   { k_Cancel, IDS_CANCEL }
 };
-
+ 
 }
 
 
@@ -411,10 +399,10 @@ class CDropTarget Z7_final:
   bool m_PanelDropIsAllowed; // = false, if current target_panel is source_panel.
                              // check it only if m_DropIsAllowed == true
                              // we use it to show icon effect that drop is not allowed here.
-
+  
   CMyComPtr<IDataObject> m_DataObject; // we set it in DragEnter()
   UStringVector m_SourcePaths;
-
+  
   // int m_DropHighlighted_SelectionIndex;
   // int m_SubFolderIndex;      // realIndex of item in m_Panel list (if drop cursor to that item)
   // UString m_DropHighlighted_SubFolderName;   // name of folder in m_Panel list (if drop cursor to that folder)
@@ -477,7 +465,7 @@ public:
     m_hGlobal_HDROP_Final : the list contains paths of all root items that
         will be created in temp directory by archive extraction operation,
         or the list of existing fs items, if source is filesystem directory.
-
+     
   The DRAWBACK: some programs (like Edge in Win10) can use names from IDataObject::GetData()
   call that was called before IDropSource::QueryContinueDrag() where we set (UseFinalGlobal = true)
   So such programs will use non-relevant m_hGlobal_HDROP_Pre item,
@@ -504,7 +492,7 @@ class CDataObject Z7_final:
 
   Z7_COMWF_B SetData(LPFORMATETC etc, STGMEDIUM *medium, BOOL release) Z7_override;
   Z7_COMWF_B EnumFormatEtc(DWORD drection, LPENUMFORMATETC *enumFormatEtc) Z7_override;
-
+  
   Z7_COMWF_B DAdvise(FORMATETC * /* etc */, DWORD /* advf */, LPADVISESINK /* pAdvSink */, DWORD * /* pdwConnection */) Z7_override
     { return OLE_E_ADVISENOTSUPPORTED; }
   Z7_COMWF_B DUnadvise(DWORD /* dwConnection */) Z7_override
@@ -561,7 +549,7 @@ public:
   NMemory::CGlobal m_hGlobal_HDROP_Final;
   // NMemory::CGlobal m_hGlobal_FileOpFlags;
   // NMemory::CGlobal m_hGlobal_PreferredDropEffect;
-
+  
   CPanel *Panel;
   CRecordVector<UInt32> Indices;
 
@@ -607,7 +595,7 @@ CDataObject::CDataObject()
   m_Format_7zip_SetTargetFolder = RegisterClipboardFormat(k_Format_7zip_SetTargetFolder);
   m_Format_7zip_SetTransfer     = RegisterClipboardFormat(k_Format_7zip_SetTransfer);
   m_Format_7zip_GetTransfer     = RegisterClipboardFormat(k_Format_7zip_GetTransfer);
-
+  
   m_Format_PerformedDropEffect  = RegisterClipboardFormat(CFSTR_PERFORMEDDROPEFFECT); // "Performed DropEffect"
   m_Format_LogicalPerformedDropEffect = RegisterClipboardFormat(CFSTR_LOGICALPERFORMEDDROPEFFECT); // "Logical Performed DropEffect"
   m_Format_DisableDragText      = RegisterClipboardFormat(TEXT("DisableDragText"));
@@ -621,13 +609,13 @@ CDataObject::CDataObject()
 
   m_PerformedDropEffect_WasSet = false;
   m_LogicalPerformedDropEffect_WasSet = false;
-
+  
   m_DestDirPrefix_FromTarget_WasSet = false;
   m_Transfer_WasSet = false;
 
   IsRightButton = false;
   IsTempFiles = false;
-
+  
   UsePreGlobal = false;
   DoNotProcessInTarget = false;
 
@@ -770,7 +758,7 @@ SetData(,, release = TRUE) from different processes (DropSource and DropTarget)
    - allocates proxy-medium-in-Source process
    - copies medium data from Target to that proxy-medium-in-Source
    - sends proxy-medium-in-Source to DataObject_in_Source->SetData().
-
+  
   after returning from SetData() to Target process:
     Win10 proxy_DataObject_in_Target releases original medium in Target process,
     only if SetData() in Source returns S_OK. It's consistent with DOCs above.
@@ -784,7 +772,7 @@ SetData(,, release = TRUE) from different processes (DropSource and DropTarget)
     So there is memory leak in Source process.
     Probably Win10 proxy_in_Source tries to avoid possible double releasing
     that can be more fatal than memory leak.
-
+    
     Then Win10 proxy_DataObject_in_Target also doesn't release
     original medium, that was allocated by DropTarget.
     So if DropTarget also doesn't release medium, there is memory leak in
@@ -821,7 +809,7 @@ SetData(,, release = TRUE) from different processes (DropSource and DropTarget)
     (release == TRUE)  works, and SetData() returns S_OK, and
                        it returns S_OK even for formats unsupported by Explorer.
   }
-
+  
   To be more compatible with DOCs and Win10-Explorer and to avoid memory leaks,
   we use the following scheme for our IDataObject::SetData(,, release == TRUE)
   in DropSource code:
@@ -1108,7 +1096,7 @@ Z7_COMWF_B CDataObject::GetData(LPFORMATETC etc, LPSTGMEDIUM medium)
   // PrintFormat(etc->cfFormat);
   HGLOBAL global;
   RINOK(QueryGetData(etc))
-
+  
   /*
   if (etc->cfFormat == m_Format_FileOpFlags)
     global = m_hGlobal_FileOpFlags;
@@ -1144,7 +1132,7 @@ Z7_COMWF_B CDataObject::GetData(LPFORMATETC etc, LPSTGMEDIUM medium)
     }
     else
       transfer.Flags |= k_SourceFlags_DoNotWaitFinish;
-
+    
     if (IsRightButton)
       transfer.Flags |= k_SourceFlags_RightButton;
     else
@@ -1161,7 +1149,7 @@ Z7_COMWF_B CDataObject::GetData(LPFORMATETC etc, LPSTGMEDIUM medium)
   }
   else
     return DV_E_FORMATETC;
-
+  
   if (!global)
     return DV_E_FORMATETC;
   medium->tymed = m_Etc.tymed;
@@ -1185,7 +1173,7 @@ Z7_COMWF_B CDataObject::GetDataHere(LPFORMATETC /* etc */, LPSTGMEDIUM /* medium
   rendering the data as specified. Objects attempting a paste or drop
   operation can call this method before calling IDataObject::GetData
   to get an indication of whether the operation may be successful.
-
+  
   The client of a data object calls QueryGetData to determine whether
   passing the specified FORMATETC structure to a subsequent call to
   IDataObject::GetData is likely to be successful.
@@ -1239,7 +1227,7 @@ class CDropSource Z7_final:
 public:
   CDataObject *DataObjectSpec;
   CMyComPtr<IDataObject> DataObject;
-
+  
   HRESULT DragProcessing_HRESULT;
   bool DragProcessing_WasFinished;
 
@@ -1277,7 +1265,7 @@ Z7_COMWF_B CDropSource::QueryContinueDrag(BOOL escapePressed, DWORD keyState)
     PRF4(s);
   }
   #endif
-
+    
   /*
   if ((keyState & MK_LBUTTON) == 0)
   {
@@ -1311,7 +1299,7 @@ Z7_COMWF_B CDropSource::QueryContinueDrag(BOOL escapePressed, DWORD keyState)
     }
     return S_OK;
   }
-
+  
   if ((keyState & MK_LBUTTON) != 0)
   {
     if (DataObjectSpec->IsRightButton)
@@ -1327,7 +1315,7 @@ Z7_COMWF_B CDropSource::QueryContinueDrag(BOOL escapePressed, DWORD keyState)
   }
   {
     // the mouse button starting the drag-and-drop operation has been released.
-
+    
     /* Win10 probably calls DragOver()/GiveFeedback() just before LBUTTON releasing.
        so m_Effect is effect returned by DropTarget::DragOver()
        just before LBUTTON releasing.
@@ -1351,7 +1339,7 @@ Z7_COMWF_B CDropSource::QueryContinueDrag(BOOL escapePressed, DWORD keyState)
     if (DataObjectSpec->IsRightButton)
       return DRAGDROP_S_DROP;
     */
-
+   
     if (DataObjectSpec->IsTempFiles)
     {
       if (!DataObjectSpec->DestDirPrefix_FromTarget.IsEmpty())
@@ -1446,10 +1434,10 @@ static bool CopyNamesToHGlobal(NMemory::CGlobal &hgDrop, const UStringVector &na
       namesA.Add(GetSystemString(names[i]));
     for (i = 0; i < namesA.Size(); i++)
       totalLen += namesA[i].Len() + 1;
-
+    
     if (!hgDrop.Alloc(GHND | GMEM_SHARE, totalLen * sizeof(CHAR) + sizeof(DROPFILES)))
       return false;
-
+    
     NMemory::CGlobalLock dropLock(hgDrop);
     DROPFILES *dropFiles = (DROPFILES *)dropLock.GetPointer();
     if (!dropFiles)
@@ -1476,10 +1464,10 @@ static bool CopyNamesToHGlobal(NMemory::CGlobal &hgDrop, const UStringVector &na
     unsigned i;
     for (i = 0; i < names.Size(); i++)
       totalLen += names[i].Len() + 1;
-
+    
     if (!hgDrop.Alloc(GHND | GMEM_SHARE, totalLen * sizeof(WCHAR) + sizeof(DROPFILES)))
       return false;
-
+    
     NMemory::CGlobalLock dropLock(hgDrop);
     DROPFILES *dropFiles = (DROPFILES *)dropLock.GetPointer();
     if (!dropFiles)
@@ -1516,7 +1504,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */, bool isRightButton)
     return;
 
   CDisableTimerProcessing disableTimerProcessing2(*this);
-
+  
   CRecordVector<UInt32> indices;
   Get_ItemIndices_Operated(indices);
   if (indices.Size() == 0)
@@ -1626,7 +1614,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */, bool isRightButton)
     if (!CopyNamesToHGlobal(dataObjectSpec->m_hGlobal_HDROP_Final, names))
       return;
   }
-
+  
   CDropSource *dropSourceSpec = new CDropSource;
   CMyComPtr<IDropSource> dropSource = dropSourceSpec;
   dataObjectSpec->Panel = this;
@@ -1636,7 +1624,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */, bool isRightButton)
   dropSourceSpec->DataObjectSpec = dataObjectSpec;
   dropSourceSpec->DataObject = dataObjectSpec;
 
-
+ 
   /*
   CTime - file creation timestamp.
   There are two operations in Windows with Drag and Drop:
@@ -1650,7 +1638,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */, bool isRightButton)
     Does DoDragDrop() use some another function (not MoveFile())?
 
   if (effectsOK == DROPEFFECT_COPY) it works as COPY_OPERATION
-
+   
   if (effectsOK == DROPEFFECT_MOVE) drag works as MOVE_OPERATION
 
   if (effectsOK == (DROPEFFECT_COPY | DROPEFFECT_MOVE))
@@ -1658,7 +1646,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */, bool isRightButton)
     if we drag file to same volume, then Windows suggests:
        CTRL      - COPY_OPERATION
        [default] - MOVE_OPERATION
-
+    
     if we drag file to another volume, then Windows suggests
        [default] - COPY_OPERATION
        SHIFT     - MOVE_OPERATION
@@ -1734,9 +1722,9 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */, bool isRightButton)
   */
 
   const bool canceled = (res == DRAGDROP_S_CANCEL);
-
+  
   CDisableNotify disableNotify(*this);
-
+  
   if (res == DRAGDROP_S_DROP)
   {
     /* DRAGDROP_S_DROP is returned. It means that
@@ -1801,7 +1789,7 @@ void CPanel::OnDrag(LPNMLISTVIEW /* nmListView */, bool isRightButton)
     messagesDialog.Messages = &dataObjectSpec->Messages;
     messagesDialog.Create((*this));
   }
-
+  
   if (res != S_OK && res != E_ABORT)
   {
     // we restore Notify before MessageBox_Error_HRESULT. So we will see files selection
@@ -1868,7 +1856,7 @@ void CDropTarget::ClearState()
   rendering the data as specified. Objects attempting a paste or drop
   operation can call this method before calling IDataObject::GetData
   to get an indication of whether the operation may be successful.
-
+  
   The client of a data object calls QueryGetData to determine whether
   passing the specified FORMATETC structure to a subsequent call to
   IDataObject::GetData is likely to be successful.
@@ -2083,7 +2071,7 @@ bool CDropTarget::IsItSameDrive() const
     return false;
 
   UString drive;
-
+  
   if (m_Panel->IsFSFolder())
   {
     drive = m_Panel->GetDriveOrNetworkPrefix();
@@ -2101,7 +2089,7 @@ bool CDropTarget::IsItSameDrive() const
 
   if (m_SourcePaths.Size() == 0)
     return false;
-
+  
   FOR_VECTOR (i, m_SourcePaths)
   {
     if (!m_SourcePaths[i].IsPrefixedBy_NoCase(drive))
@@ -2450,7 +2438,7 @@ Z7_COMWF_B CDropTarget::DragOver(DWORD keyState, POINTL pt, DWORD *effect)
     For efficiency reasons, a data object is not passed in IDropTarget::DragOver.
     The data object passed in the most recent call to IDropTarget::DragEnter
     is available and can be used.
-
+  
     When IDropTarget::DragOver has completed its operation, the DoDragDrop
     function calls IDropSource::GiveFeedback so the source application can display
     the appropriate visual feedback to the user.
@@ -2535,7 +2523,7 @@ Z7_COMWF_B CDropTarget::Drop(IDataObject *dataObject, DWORD keyState,
   */
   if (!m_DropIsAllowed) LoadNames_From_DataObject(dataObject);
   PositionCursor(pt);
-
+  
   CPanel::CDisableTimerProcessing2 disableTimerProcessing(m_Panel);
   // CDisableNotify disableNotify2(m_Panel);
 
@@ -2578,7 +2566,7 @@ Z7_COMWF_B CDropTarget::Drop(IDataObject *dataObject, DWORD keyState,
           createNewArchive = false; // g_CreateArchive_for_Drag_from_7zip;
         else
           createNewArchive = true; // g_CreateArchive_for_Drag_from_Explorer;
-
+        
         if (createNewArchive)
           cmd = NDragMenu::k_AddToArc;
         else
@@ -2652,7 +2640,7 @@ Z7_COMWF_B CDropTarget::Drop(IDataObject *dataObject, DWORD keyState,
     target.Flags |= k_TargetFlags_WasCanceled;
   if (menu_WasShown)
     target.Flags |= k_TargetFlags_MenuWasShown;
-
+ 
   SendToSource_auto(dataObject, target);
 
   CDataObject_GetTransfer transfer;
@@ -2752,7 +2740,7 @@ Z7_COMWF_B CDropTarget::Drop(IDataObject *dataObject, DWORD keyState,
 
   SendToSource_TransferInfo(dataObject, target);
   } catch(...) { hres = E_FAIL; }
-
+  
   ClearState();
   // *effect |= (1 << 10); // for debug
   // *effect = DROPEFFECT_COPY; // for debug
@@ -2863,7 +2851,7 @@ void CPanel::CompressDropFiles(
         false, // isHash
         NULL,  // CFileInfo *fi
         arcName_base);
-
+    
     bool needWait;
     if (sourceFlags & k_SourceFlags_WaitFinish)
       needWait = true;

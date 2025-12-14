@@ -11,16 +11,6 @@
 
 #include "../../PropID.h"
 
-// **************** NanaZip Modification Start ****************
-#undef GetCurrentTime
-#include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
-#include <wincodec.h>
-#include <winrt/Windows.Graphics.Imaging.h>
-#include <windows.graphics.imaging.interop.h>
-// **************** NanaZip Modification End ****************
-
 #ifdef UNDER_CE
 #include "FSFolder.h"
 #else
@@ -33,10 +23,6 @@
 #include "ViewSettings.h"
 
 #include "resource.h"
-
-// **************** NanaZip Modification Start ****************
-#include <string>
-// **************** NanaZip Modification End ****************
 
 using namespace NWindows;
 using namespace NFile;
@@ -53,7 +39,7 @@ void CPanel::ReleaseFolder()
   _folderRawProps.Release();
   _folderAltStreams.Release();
   _folderOperations.Release();
-
+  
   _thereAreDeletedItems = false;
 }
 
@@ -75,7 +61,7 @@ void CPanel::SetToRootFolder()
 {
   ReleaseFolder();
   _library.Free();
-
+  
   CRootFolder *rootFolderSpec = new CRootFolder;
   SetNewFolder(rootFolderSpec);
   rootFolderSpec->Init();
@@ -89,35 +75,14 @@ static bool DoesNameContainWildcard_SkipRoot(const UString &path)
 
 HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, COpenResult &openRes)
 {
-  // **************** NanaZip Modification Start ****************
-  // UString path = fullPath;
-  // 32767 is the maximum path length without the terminating null character.
-  std::wstring ExpandedPath(32767, L'\0');
-  DWORD ExpandedPathLength = ::ExpandEnvironmentStringsW(
-      fullPath.Ptr(),
-      ExpandedPath.data(),
-      static_cast<DWORD>(ExpandedPath.size()));
-  if (ExpandedPathLength)
-  {
-      // If the ExpandEnvironmentStringsW function succeeds, the return value
-      // is the number of wchar_t stored in the destination buffer, including
-      // the terminating null character. So we need to resize the string to
-      // remove the extra null characters at the end.
-      ExpandedPath.resize(ExpandedPathLength - 1);
-  }
-  // According to the UString implementation, converting from std::wstring will
-  // be good for readability, which will be useful for future maintenance.
-  UString path = ExpandedPathLength
-      ? UString(ExpandedPath.c_str())
-      : fullPath;
-  // **************** NanaZip Modification End ****************
+  UString path = fullPath;
   #ifdef _WIN32
   path.Replace(L'/', WCHAR_PATH_SEPARATOR);
   #endif
 
   openRes.ArchiveIsOpened = false;
   openRes.Encrypted = false;
-
+  
   CDisableTimerProcessing disableTimerProcessing(*this);
   CDisableNotify disableNotify(*this);
 
@@ -137,7 +102,7 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
       else
         relatPath.Delete(0);
     }
-
+    
     UString relatPath2 = relatPath;
     if (!relatPath2.IsEmpty() && !IS_PATH_SEPAR(relatPath2.Back()))
       relatPath2.Add_PathSepar();
@@ -173,7 +138,7 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
     const unsigned prefixSize = NName::GetRootPrefixSize(sysPath);
     if (prefixSize == 0 || sysPath[prefixSize] == 0)
       sysPath.Empty();
-
+    
     #if defined(_WIN32) && !defined(UNDER_CE)
     if (!sysPath.IsEmpty() && sysPath.Back() == ':' &&
       (sysPath.Len() != 2 || !NName::IsDrivePath2(sysPath)))
@@ -185,9 +150,9 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
         sysPath.Empty();
     }
     #endif
-
+    
     CFileInfo fileInfo;
-
+    
     while (!sysPath.IsEmpty())
     {
       if (sysPath.Len() <= prefixSize)
@@ -237,11 +202,11 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
         sysPath.DeleteFrom((unsigned)pos);
       }
     }
-
+    
     SetToRootFolder();
 
     CMyComPtr<IFolderFolder> newFolder;
-
+  
     if (sysPath.IsEmpty())
     {
       _folder->BindToFolder(path, &newFolder);
@@ -265,11 +230,11 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
     else
     {
       FString dirPrefix, fileName;
-
+      
       NDir::GetFullPathAndSplit(us2fs(sysPath), dirPrefix, fileName);
 
       HRESULT res = S_OK;
-
+      
       #ifdef _WIN32
       if (DoesNameContainWildcard_SkipRoot(fs2us(dirPrefix)))
         return E_INVALIDARG;
@@ -285,7 +250,7 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
         tfi.FilePath = us2fs(sysPath);
         res = OpenAsArc(NULL, tfi, sysPath, arcFormat, openRes);
       }
-
+      
       if (res == S_FALSE)
         _folder->BindToFolder(fs2us(dirPrefix), &newFolder);
       else
@@ -298,7 +263,7 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
           path.Delete(0);
       }
     }
-
+    
     if (newFolder)
     {
       SetNewFolder(newFolder);
@@ -306,7 +271,7 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
       return S_OK;
     }
   }
-
+  
   {
     // ---------- we open folder remPath in archive and sub archives ----------
 
@@ -336,7 +301,7 @@ HRESULT CPanel::BindToPath(const UString &fullPath, const UString &arcFormat, CO
             curPos += (unsigned)pos + 1;
         }
       }
-
+      
       if (!newFolder)
         break;
 
@@ -353,7 +318,7 @@ HRESULT CPanel::BindToPathAndRefresh(const UString &path)
   CDisableNotify disableNotify(*this);
   COpenResult openRes;
   UString s = path;
-
+  
   #ifdef _WIN32
     if (!s.IsEmpty() && s[0] == '\"' && s.Back() == '\"')
     {
@@ -414,49 +379,6 @@ static int GetRealIconIndex_for_DirPath(CFSTR path, DWORD attrib)
       return index;
   return g_Ext_to_Icon_Map.GetIconIndex_DIR(attrib);
 }
-
-// **************** NanaZip Modification Start ****************
-static winrt::Windows::Graphics::Imaging::SoftwareBitmap ConvertIconToSoftwareBitmap(HICON hIcon)
-{
-    static winrt::com_ptr<::IWICImagingFactory> wicFactory;
-    if (!wicFactory)
-    {
-        wicFactory = winrt::create_instance<::IWICImagingFactory>(
-            CLSID_WICImagingFactory,
-            CLSCTX_INPROC_SERVER,
-            nullptr);
-    }
-
-    static winrt::com_ptr<::ISoftwareBitmapNativeFactory> factory;
-    if (!factory)
-    {
-        factory =
-            winrt::get_activation_factory<
-            winrt::Windows::Graphics::Imaging::SoftwareBitmap,
-            ::ISoftwareBitmapNativeFactory>();
-    }
-
-    winrt::com_ptr<::IWICBitmap> bitmap;
-
-    winrt::check_hresult(
-        wicFactory->CreateBitmapFromHICON(hIcon, bitmap.put()));
-
-    winrt::Windows::Graphics::Imaging::SoftwareBitmap winrtBitmap = nullptr;
-
-    winrt::check_hresult(
-        factory->CreateFromWICBitmap(
-            bitmap.get(),
-            TRUE,
-            winrt::guid_of<winrt::Windows::Graphics::Imaging::SoftwareBitmap>(),
-            winrt::put_abi(winrtBitmap)));
-
-    return winrt::Windows::Graphics::Imaging::SoftwareBitmap::Convert(
-        winrtBitmap,
-        winrt::Windows::Graphics::Imaging::BitmapPixelFormat::Bgra8,
-        winrt::Windows::Graphics::Imaging::BitmapAlphaMode::Premultiplied
-    );
-}
-// **************** NanaZip Modification End ****************
 
 
 extern UString RootFolder_GetName_Computer(int &iconIndex);
@@ -590,7 +512,7 @@ void CPanel::LoadFullPathAndShow()
   }
   item.iItem = -1;
   _headerComboBox.SetItem(&item);
-
+  
   #endif
 
   RefreshTitle();
@@ -607,8 +529,6 @@ LRESULT CPanel::OnNotifyComboBoxEnter(const UString &s)
   return FALSE;
 }
 
-// **************** NanaZip Modification Start ****************
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
 bool CPanel::OnNotifyComboBoxEndEdit(PNMCBEENDEDITW info, LRESULT &result)
 {
   if (info->iWhy == CBENF_ESCAPE)
@@ -637,30 +557,6 @@ bool CPanel::OnNotifyComboBoxEndEdit(PNMCBEENDEDITW info, LRESULT &result)
   }
   return false;
 }
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-void CPanel::OnAddressBarQuerySubmitted(
-    winrt::NanaZip::Modern::AddressBar const&,
-    winrt::NanaZip::Modern::AddressBarQuerySubmittedEventArgs const& queryArgs)
-{
-    winrt::Windows::Foundation::IInspectable chosenSuggestion
-        = queryArgs.ChosenSuggestion();
-
-    if (chosenSuggestion)
-    {
-        winrt::NanaZip::Modern::AddressBarItem item
-            = chosenSuggestion.as<winrt::NanaZip::Modern::AddressBarItem>();
-        unsigned int index;
-        _items.IndexOf(item, index);
-        UString pass = ComboBoxPaths[index];
-        if (BindToPathAndRefresh(pass) == S_OK)
-        {
-            PostMsg(kSetFocusToListView);
-        }
-    }
-    else
-        OnNotifyComboBoxEnter(queryArgs.QueryText().c_str());
-}
-// **************** NanaZip Modification End ****************
 #endif
 
 #ifndef _UNICODE
@@ -702,11 +598,9 @@ void CPanel::AddComboBoxItem(const UString &name, int iconIndex, unsigned indent
   for (unsigned i = 0; i < indent; i++)
     s += "  ";
   _headerComboBox.AddString(s + name);
-
+  
   #else
-
-  // **************** NanaZip Modification Start ****************
-#if 0 // ******** Annotated 7-Zip Mainline Source Code snippet Start ********
+  
   COMBOBOXEXITEMW item;
   item.mask = CBEIF_TEXT | CBEIF_INDENT;
   if (iconIndex < 0)
@@ -718,24 +612,7 @@ void CPanel::AddComboBoxItem(const UString &name, int iconIndex, unsigned indent
   item.iIndent = (int)indent;
   item.pszText = name.Ptr_non_const();
   _headerComboBox.InsertItem(&item);
-#endif // ******** Annotated 7-Zip Mainline Source Code snippet End ********
-  winrt::NanaZip::Modern::AddressBarItem item;
-  item.Text(name.Ptr());
-  item.Padding({ indent * 16.0, 0, 0, 0 });
-
-  HICON icon = ImageList_GetIcon(_sysImageList, iconIndex, ILD_IMAGE);
-  winrt::Windows::Graphics::Imaging::SoftwareBitmap bitmap =
-      ConvertIconToSoftwareBitmap(icon);
-  winrt::Windows::UI::Xaml::Media::Imaging::SoftwareBitmapSource source;
-  // Do not put ".get()" here, it hangs the app.
-  // Blocking doesn't matter here anyways since it's instant.
-  source.SetBitmapAsync(bitmap);
-  item.Icon(source);
-  DestroyIcon(icon);
-
-  _items.Append(item);
-  // **************** NanaZip Modification End ****************
-
+  
   #endif
 
   if (addToList)
@@ -756,7 +633,7 @@ bool CPanel::OnComboBoxCommand(UINT code, LPARAM /* param */, LRESULT &result)
     {
       ComboBoxPaths.Clear();
       _headerComboBox.ResetContent();
-
+      
       UString sumPath;
       UStringVector pathParts;
       unsigned indent = 0;
@@ -780,11 +657,11 @@ bool CPanel::OnComboBoxCommand(UINT code, LPARAM /* param */, LRESULT &result)
             ComboBoxPaths.Add(prefix0);
           }
         }
-
+        
         unsigned rootPrefixSize = NName::GetRootPrefixSize(path);
 
         sumPath = path;
-
+        
         if (rootPrefixSize <= prefix0.Len())
         {
           rootPrefixSize = prefix0.Len();
@@ -794,7 +671,7 @@ bool CPanel::OnComboBoxCommand(UINT code, LPARAM /* param */, LRESULT &result)
         {
           // rootPrefixSize > prefix0.Len()
           sumPath.DeleteFrom(rootPrefixSize);
-
+          
           CFileInfo info;
           DWORD attrib = FILE_ATTRIBUTE_DIRECTORY;
           if (info.Find(us2fs(sumPath)) && info.IsDir())
@@ -808,14 +685,14 @@ bool CPanel::OnComboBoxCommand(UINT code, LPARAM /* param */, LRESULT &result)
           }
           UString path_for_icon = sumPath;
           NName::If_IsSuperPath_RemoveSuperPrefix(path_for_icon);
-
+          
           AddComboBoxItem(s,
               GetRealIconIndex_for_DirPath(us2fs(path_for_icon), attrib),
               indent++,
               false); // addToList
           ComboBoxPaths.Add(sumPath);
         }
-
+          
         path.DeleteFrontal(rootPrefixSize);
         SplitPathToParts(path, pathParts);
       }
@@ -846,7 +723,7 @@ bool CPanel::OnComboBoxCommand(UINT code, LPARAM /* param */, LRESULT &result)
             next_Arc_index++;
           }
         }
-
+        
         int iconIndex = -1;
         DWORD attrib = isRootDir_inLink ?
             FILE_ATTRIBUTE_ARCHIVE:
@@ -869,7 +746,7 @@ bool CPanel::OnComboBoxCommand(UINT code, LPARAM /* param */, LRESULT &result)
           }
           iconIndex = Shell_GetFileInfo_SysIconIndex_for_Path(us2fs(sumPath), attrib);
         }
-
+        
         if (iconIndex < 0)
           iconIndex = g_Ext_to_Icon_Map.GetIconIndex(attrib, name);
         // iconIndex = -1; // for debug
@@ -919,7 +796,7 @@ bool CPanel::OnComboBoxCommand(UINT code, LPARAM /* param */, LRESULT &result)
       }
 
 #endif
-
+    
       return false;
     }
 
@@ -1040,10 +917,10 @@ UString CPanel::GetParentDirPrefix() const
 void CPanel::OpenParentFolder()
 {
   LoadFullPath(); // Maybe we don't need it ??
-
+  
   UString parentFolderPrefix;
   UString focusedName;
-
+  
   if (!_currentFolderPrefix.IsEmpty())
   {
     wchar_t c = _currentFolderPrefix.Back();
@@ -1074,12 +951,12 @@ void CPanel::OpenParentFolder()
 
   CDisableTimerProcessing disableTimerProcessing(*this);
   CDisableNotify disableNotify(*this);
-
+  
   CMyComPtr<IFolderFolder> newFolder;
   _folder->BindToParentFolder(&newFolder);
 
   // newFolder.Release(); // for test
-
+  
   if (newFolder)
     SetNewFolder(newFolder);
   else
@@ -1095,7 +972,7 @@ void CPanel::OpenParentFolder()
       CloseOneLevel();
       needSetFolder = (!_folder);
     }
-
+    
     if (needSetFolder)
     {
       {
@@ -1104,7 +981,7 @@ void CPanel::OpenParentFolder()
       }
     }
   }
-
+    
   CSelectedState state;
   state.FocusedName = focusedName;
   state.FocusedName_Defined = true;
@@ -1226,7 +1103,7 @@ void CPanel::OpenAltStreams()
     }
     return;
   }
-
+  
   #if defined(_WIN32) && !defined(UNDER_CE)
   UString path;
   if (realIndex >= 0)
