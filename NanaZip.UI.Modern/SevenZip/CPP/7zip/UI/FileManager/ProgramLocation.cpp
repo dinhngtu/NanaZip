@@ -1,3 +1,3 @@
-﻿// ProgramLocation.cpp
+// ProgramLocation.cpp
 
 #include "StdAfx.h"
