@@ -1,7 +1,7 @@
 ﻿// Windows/PropVariant.h
 
-#ifndef __WINDOWS_PROP_VARIANT_H
-#define __WINDOWS_PROP_VARIANT_H
+#ifndef ZIP7_INC_WINDOWS_PROP_VARIANT_H
+#define ZIP7_INC_WINDOWS_PROP_VARIANT_H
 
 #include "../Common/MyTypes.h"
 #include "../Common/MyWindows.h"
@@ -64,7 +64,7 @@ public:
     // wReserved2 = 0;
     // wReserved3 = 0;
     // uhVal.QuadPart = 0;
-    bstrVal = 0;
+    bstrVal = NULL;
   }
 
 
@@ -110,7 +110,7 @@ public:
     return 0;
   }
 
-  ~CPropVariant();
+  ~CPropVariant() throw();
   CPropVariant(const PROPVARIANT &varSrc);
   CPropVariant(const CPropVariant &varSrc);
   CPropVariant(BSTR bstrSrc);
@@ -138,10 +138,10 @@ public:
   CPropVariant& operator=(const char *s);
   CPropVariant& operator=(const AString &s)
     { return (*this)=(const char *)s; }
-
+  
   CPropVariant& operator=(bool bSrc) throw();
   CPropVariant& operator=(Byte value) throw();
-
+  
 private:
   CPropVariant& operator=(Int16 value) throw();
   CPropVariant& operator=(UInt16 value) throw();

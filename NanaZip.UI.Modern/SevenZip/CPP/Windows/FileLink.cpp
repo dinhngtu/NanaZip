@@ -8,7 +8,7 @@
 #include <unistd.h>
 #endif
 
-#ifdef SUPPORT_DEVICE_FILE
+#ifdef Z7_DEVICE_FILE
 #include "../../C/Alloc.h"
 #endif
 
@@ -20,6 +20,15 @@
 #include "FileIO.h"
 #include "FileName.h"
 
+#ifdef Z7_OLD_WIN_SDK
+#ifndef ERROR_INVALID_REPARSE_DATA
+#define ERROR_INVALID_REPARSE_DATA       4392L
+#endif
+#ifndef ERROR_REPARSE_TAG_INVALID
+#define ERROR_REPARSE_TAG_INVALID        4393L
+#endif
+#endif
+
 #ifndef _UNICODE
 extern bool g_IsNT;
 #endif
@@ -30,20 +39,32 @@ namespace NFile {
 using namespace NName;
 
 /*
+Win10 Junctions/SymLinks:
+  - (/) slash doesn't work as path separator
+  - Win10 preinstalled junctions don't use tail backslash, but tail backslashes also work.
+  - double backslash works only after drive prefix "c:\\dir1\dir2\",
+    and doesn't work in another places.
+  - absolute path without \??\ prefix doesn't work
+  - absolute path "c:" doesn't work
+*/
+
+/*
   Reparse Points (Junctions and Symbolic Links):
   struct
   {
     UInt32 Tag;
     UInt16 Size;     // not including starting 8 bytes
-    UInt16 Reserved; // = 0
-
+    UInt16 Reserved; // = 0, DOCs: // Length, in bytes, of the unparsed portion of
+       // the file name pointed to by the FileName member of the associated file object.
+       // This member is only valid for create operations when the I/O fails with STATUS_REPARSE.
+    
     UInt16 SubstituteOffset; // offset in bytes from  start of namesChars
     UInt16 SubstituteLen;    // size in bytes, it doesn't include tailed NUL
     UInt16 PrintOffset;      // offset in bytes from  start of namesChars
     UInt16 PrintLen;         // size in bytes, it doesn't include tailed NUL
-
+    
     [UInt32] Flags;  // for Symbolic Links only.
-
+    
     UInt16 namesChars[]
   }
 
@@ -59,6 +80,16 @@ using namespace NName;
     2) Default Order in table:
          Print Path
          Substitute Path
+
+DOCS:
+  The print name SHOULD be an informative pathname, suitable for display
+  to a user, that also identifies the target of the mount point.
+  Neither of these pathnames can contain dot directory names.
+
+reparse tags, with the exception of IO_REPARSE_TAG_SYMLINK,
+are processed on the server and are not processed by a client
+after transmission over the wire.
+Clients SHOULD treat associated reparse data as opaque data.
 */
 
 /*
@@ -72,23 +103,20 @@ static const UInt32 kReparseFlags_Alias       = (1 << 29);
 static const UInt32 kReparseFlags_HighLatency = (1 << 30);
 static const UInt32 kReparseFlags_Microsoft   = ((UInt32)1 << 31);
 
-#define _my_IO_REPARSE_TAG_HSM          (0xC0000004L)
-#define _my_IO_REPARSE_TAG_HSM2         (0x80000006L)
-#define _my_IO_REPARSE_TAG_SIS          (0x80000007L)
-#define _my_IO_REPARSE_TAG_WIM          (0x80000008L)
-#define _my_IO_REPARSE_TAG_CSV          (0x80000009L)
-#define _my_IO_REPARSE_TAG_DFS          (0x8000000AL)
-#define _my_IO_REPARSE_TAG_DFSR         (0x80000012L)
+#define Z7_WIN_IO_REPARSE_TAG_HSM          (0xC0000004L)
+#define Z7_WIN_IO_REPARSE_TAG_HSM2         (0x80000006L)
+#define Z7_WIN_IO_REPARSE_TAG_SIS          (0x80000007L)
+#define Z7_WIN_IO_REPARSE_TAG_WIM          (0x80000008L)
+#define Z7_WIN_IO_REPARSE_TAG_CSV          (0x80000009L)
+#define Z7_WIN_IO_REPARSE_TAG_DFS          (0x8000000AL)
+#define Z7_WIN_IO_REPARSE_TAG_DFSR         (0x80000012L)
 */
 
 #define Get16(p) GetUi16(p)
 #define Get32(p) GetUi32(p)
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 static const char * const k_LinkPrefix = "\\??\\";
 static const char * const k_LinkPrefix_UNC = "\\??\\UNC\\";
-// **************** NanaZip Modification End ****************
 static const unsigned k_LinkPrefix_Size = 4;
 
 static bool IsLinkPrefix(const wchar_t *s)
@@ -97,7 +125,7 @@ static bool IsLinkPrefix(const wchar_t *s)
 }
 
 /*
-static const wchar_t * const k_VolumePrefix = L"Volume{";
+static const char * const k_VolumePrefix = "Volume{";
 static const bool IsVolumeName(const wchar_t *s)
 {
   return IsString1PrefixedByString2(s, k_VolumePrefix);
@@ -113,16 +141,14 @@ static void WriteString(Byte *dest, const wchar_t *path)
 {
   for (;;)
   {
-    wchar_t c = *path++;
+    const wchar_t c = *path++;
     if (c == 0)
       return;
-    Set16(dest, (UInt16)c);
+    Set16(dest, (UInt16)c)
     dest += 2;
   }
 }
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00, modified for NanaZip.
 #ifdef _WIN32
 void Convert_WinPath_to_WslLinuxPath(FString &s, bool convertDrivePath)
 {
@@ -152,11 +178,11 @@ void FillLinkData_WslLink(CByteBuffer &dest, const wchar_t *path)
     return;
   dest.Alloc(8 + size);
   Byte *p = dest;
-  Set32(p, _my_IO_REPARSE_TAG_LX_SYMLINK)
+  Set32(p, Z7_WIN_IO_REPARSE_TAG_LX_SYMLINK)
   // Set32(p + 4, (UInt32)size)
   Set16(p + 4, (UInt16)size)
   Set16(p + 6, 0)
-  Set32(p + 8, _my_LX_SYMLINK_VERSION_2)
+  Set32(p + 8, Z7_WIN_LX_SYMLINK_VERSION_2)
   memcpy(p + 12, utf.Ptr(), utf.Len());
 }
 
@@ -223,8 +249,8 @@ void FillLinkData_WinLink(CByteBuffer &dest, const wchar_t *path, bool isSymLink
   dest.Alloc(size);
   memset(dest, 0, size);
   const UInt32 tag = isSymLink ?
-      _my_IO_REPARSE_TAG_SYMLINK :
-      _my_IO_REPARSE_TAG_MOUNT_POINT;
+      Z7_WIN_IO_REPARSE_TAG_SYMLINK :
+      Z7_WIN_IO_REPARSE_TAG_MOUNT_POINT;
   Byte *p = dest;
   Set32(p, tag)
   // Set32(p + 4, (UInt32)(size - 8))
@@ -246,7 +272,7 @@ void FillLinkData_WinLink(CByteBuffer &dest, const wchar_t *path, bool isSymLink
   p += 8;
   if (isSymLink)
   {
-    const UInt32 flags = isAbs ? 0 : _my_SYMLINK_FLAG_RELATIVE;
+    const UInt32 flags = isAbs ? 0 : Z7_WIN_SYMLINK_FLAG_RELATIVE;
     Set32(p, flags)
     p += 4;
   }
@@ -254,7 +280,6 @@ void FillLinkData_WinLink(CByteBuffer &dest, const wchar_t *path, bool isSymLink
   if (needPrintName)
     WriteString(p + printOffs, path);
 }
-// **************** NanaZip Modification End ****************
 
 #endif // defined(_WIN32) && !defined(UNDER_CE)
 
@@ -265,7 +290,7 @@ static void GetString(const Byte *p, unsigned len, UString &res)
   unsigned i;
   for (i = 0; i < len; i++)
   {
-    wchar_t c = Get16(p + i * 2);
+    const wchar_t c = Get16(p + (size_t)i * 2);
     if (c == 0)
       break;
     s[i] = c;
@@ -273,6 +298,7 @@ static void GetString(const Byte *p, unsigned len, UString &res)
   s[i] = 0;
   res.ReleaseBuf_SetLen(i);
 }
+
 
 bool CReparseAttr::Parse(const Byte *p, size_t size)
 {
@@ -284,33 +310,29 @@ bool CReparseAttr::Parse(const Byte *p, size_t size)
   if (size < 8)
     return false;
   Tag = Get32(p);
-  UInt32 len = Get16(p + 4);
-  if (len + 8 != size)
-  // if (len + 8 > size)
-    return false;
-  /*
-  if ((type & kReparseFlags_Alias) == 0 ||
-      (type & kReparseFlags_Microsoft) == 0 ||
-      (type & 0xFFFF) != 3)
-  */
-
   if (Get16(p + 6) != 0) // padding
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.00.
-  //return false;
   {
     // DOCs: Reserved : the field SHOULD be set to 0
     // and MUST be ignored (by parser).
     // Win10 ignores it.
     MinorError = true; // optional
   }
-  // **************** NanaZip Modification End ****************
-
+  unsigned len = Get16(p + 4);
+  p += 8;
+  size -= 8;
+  if (len != size)
+  // if (len > size)
+    return false;
+  /*
+  if ((type & kReparseFlags_Alias) == 0 ||
+      (type & kReparseFlags_Microsoft) == 0 ||
+      (type & 0xFFFF) != 3)
+  */
   HeaderError = false;
 
-  if (   Tag != _my_IO_REPARSE_TAG_MOUNT_POINT
-      && Tag != _my_IO_REPARSE_TAG_SYMLINK
-      && Tag != _my_IO_REPARSE_TAG_LX_SYMLINK)
+  if (   Tag != Z7_WIN_IO_REPARSE_TAG_MOUNT_POINT
+      && Tag != Z7_WIN_IO_REPARSE_TAG_SYMLINK
+      && Tag != Z7_WIN_IO_REPARSE_TAG_LX_SYMLINK)
   {
     // for unsupported reparse points
     ErrorCode = (DWORD)ERROR_REPARSE_TAG_INVALID; // ERROR_REPARSE_TAG_MISMATCH
@@ -319,18 +341,12 @@ bool CReparseAttr::Parse(const Byte *p, size_t size)
   }
 
   TagIsUnknown = false;
-
-  p += 8;
-  size -= 8;
-
-  if (Tag == _my_IO_REPARSE_TAG_LX_SYMLINK)
+ 
+  if (Tag == Z7_WIN_IO_REPARSE_TAG_LX_SYMLINK)
   {
     if (len < 4)
       return false;
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.00.
-    if (Get32(p) != _my_LX_SYMLINK_VERSION_2)
-    // **************** NanaZip Modification End ****************
+    if (Get32(p) != Z7_WIN_LX_SYMLINK_VERSION_2)
       return false;
     len -= 4;
     p += 4;
@@ -338,32 +354,29 @@ bool CReparseAttr::Parse(const Byte *p, size_t size)
     unsigned i;
     for (i = 0; i < len; i++)
     {
-      char c = (char)p[i];
+      const char c = (char)p[i];
       s[i] = c;
       if (c == 0)
         break;
     }
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.00.
     s[i] = 0;
     WslName.ReleaseBuf_SetLen(i);
-    // **************** NanaZip Modification End ****************
     MinorError = (i != len);
     ErrorCode = 0;
     return true;
   }
-
+  
   if (len < 8)
     return false;
-  unsigned subOffs = Get16(p);
-  unsigned subLen = Get16(p + 2);
-  unsigned printOffs = Get16(p + 4);
-  unsigned printLen = Get16(p + 6);
+  const unsigned subOffs = Get16(p);
+  const unsigned subLen = Get16(p + 2);
+  const unsigned printOffs = Get16(p + 4);
+  const unsigned printLen = Get16(p + 6);
   len -= 8;
   p += 8;
 
   Flags = 0;
-  if (Tag == _my_IO_REPARSE_TAG_SYMLINK)
+  if (Tag == Z7_WIN_IO_REPARSE_TAG_SYMLINK)
   {
     if (len < 4)
       return false;
@@ -386,44 +399,34 @@ bool CReparseAttr::Parse(const Byte *p, size_t size)
 
 bool CReparseShortInfo::Parse(const Byte *p, size_t size)
 {
-  const Byte *start = p;
-  Offset= 0;
+  const Byte * const start = p;
+  Offset = 0;
   Size = 0;
   if (size < 8)
     return false;
-  UInt32 Tag = Get32(p);
+  const UInt32 Tag = Get32(p);
   UInt32 len = Get16(p + 4);
-  // **************** NanaZip Modification Start ****************
-  // Deleted from 25.00.
   /*
   if (len + 8 > size)
     return false;
   */
-  // **************** NanaZip Modification End ****************
   /*
   if ((type & kReparseFlags_Alias) == 0 ||
       (type & kReparseFlags_Microsoft) == 0 ||
       (type & 0xFFFF) != 3)
   */
-  if (Tag != _my_IO_REPARSE_TAG_MOUNT_POINT &&
-      Tag != _my_IO_REPARSE_TAG_SYMLINK)
+  if (Tag != Z7_WIN_IO_REPARSE_TAG_MOUNT_POINT &&
+      Tag != Z7_WIN_IO_REPARSE_TAG_SYMLINK)
     // return true;
     return false;
-
-  // **************** NanaZip Modification Start ****************
-  // Deleted from 25.00.
   /*
   if (Get16(p + 6) != 0) // padding
     return false;
   */
-  // **************** NanaZip Modification End ****************
-
   p += 8;
   size -= 8;
-
   if (len != size) // do we need that check?
     return false;
-
   if (len < 8)
     return false;
   unsigned subOffs = Get16(p);
@@ -434,7 +437,7 @@ bool CReparseShortInfo::Parse(const Byte *p, size_t size)
   p += 8;
 
   // UInt32 Flags = 0;
-  if (Tag == _my_IO_REPARSE_TAG_SYMLINK)
+  if (Tag == Z7_WIN_IO_REPARSE_TAG_SYMLINK)
   {
     if (len < 4)
       return false;
@@ -457,8 +460,6 @@ bool CReparseAttr::IsOkNamePair() const
 {
   if (IsLinkPrefix(SubsName))
   {
-    // **************** NanaZip Modification Start ****************
-    // Backported from 25.00.
     if (PrintName == GetPath())
       return true;
 /*
@@ -467,7 +468,6 @@ bool CReparseAttr::IsOkNamePair() const
     if (wcscmp(SubsName.Ptr(k_LinkPrefix_Size), PrintName) == 0)
       return true;
 */
-    // **************** NanaZip Modification End ****************
   }
   return wcscmp(SubsName, PrintName) == 0;
 }
@@ -481,8 +481,6 @@ bool CReparseAttr::IsVolume() const
 }
 */
 
-// **************** NanaZip Modification Start ****************
-// Backported from 25.00.
 UString CReparseAttr::GetPath() const
 {
   UString s (SubsName);
@@ -508,15 +506,14 @@ UString CReparseAttr::GetPath() const
   }
   return s;
 }
-// **************** NanaZip Modification End ****************
 
-#ifdef SUPPORT_DEVICE_FILE
+#ifdef Z7_DEVICE_FILE
 
 namespace NSystem
 {
 bool MyGetDiskFreeSpace(CFSTR rootPath, UInt64 &clusterSize, UInt64 &totalSize, UInt64 &freeSize);
 }
-#endif // SUPPORT_DEVICE_FILE
+#endif // Z7_DEVICE_FILE
 
 #if defined(_WIN32) && !defined(UNDER_CE)
 
@@ -544,7 +541,7 @@ bool GetReparseData(CFSTR path, CByteBuffer &reparseData, BY_HANDLE_FILE_INFORMA
 static bool CreatePrefixDirOfFile(CFSTR path)
 {
   FString path2 (path);
-  int pos = path2.ReverseFind_PathSepar();
+  const int pos = path2.ReverseFind_PathSepar();
   if (pos < 0)
     return true;
   #ifdef _WIN32
@@ -570,6 +567,8 @@ static bool OutIoReparseData(DWORD controlCode, CFSTR path, void *data, DWORD si
 }
 
 
+// MOUNT_POINT (Junction Point) and LX_SYMLINK (WSL) can be written without administrator rights.
+// SYMLINK requires administrator rights.
 // If there is Reparse data already, it still writes new Reparse data
 bool SetReparseData(CFSTR path, bool isDir, const void *data, DWORD size)
 {
@@ -593,7 +592,7 @@ bool SetReparseData(CFSTR path, bool isDir, const void *data, DWORD size)
     {
       CreatePrefixDirOfFile(path);
       COutFile file;
-      if (!file.Create(path, CREATE_NEW))
+      if (!file.Create_NEW(path))
         return false;
     }
   }
@@ -616,14 +615,11 @@ bool DeleteReparseData(CFSTR path)
     SetLastError(ERROR_INVALID_REPARSE_DATA);
     return false;
   }
-  // **************** NanaZip Modification Start ****************
-  // Backported from 25.00.
   // BYTE buf[my_REPARSE_DATA_BUFFER_HEADER_SIZE];
   // memset(buf, 0, sizeof(buf));
   // memcpy(buf, reparseData, 4); // tag
   memset(reparseData + 4, 0, my_REPARSE_DATA_BUFFER_HEADER_SIZE - 4);
   return OutIoReparseData(my_FSCTL_DELETE_REPARSE_POINT, path, reparseData, my_REPARSE_DATA_BUFFER_HEADER_SIZE);
-  // **************** NanaZip Modification End ****************
 }
 
 }

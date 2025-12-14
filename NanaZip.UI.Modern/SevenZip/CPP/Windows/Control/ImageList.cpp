@@ -1,4 +1,4 @@
-﻿// Windows/Control/ImageList.cpp
+// Windows/Control/ImageList.cpp
 
 #include "StdAfx.h"
 

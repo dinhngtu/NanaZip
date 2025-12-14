@@ -1,4 +1,4 @@
-﻿// Windows/Window.cpp
+// Windows/Window.cpp
 
 #include "StdAfx.h"
 
@@ -161,7 +161,7 @@ bool MySetWindowText(HWND wnd, LPCWSTR s)
 }
 #endif
 
-bool CWindow::GetText(CSysString &s)
+bool CWindow::GetText(CSysString &s) const
 {
   s.Empty();
   unsigned len = (unsigned)GetTextLength();
@@ -169,7 +169,7 @@ bool CWindow::GetText(CSysString &s)
     return (::GetLastError() == ERROR_SUCCESS);
   TCHAR *p = s.GetBuf(len);
   {
-    unsigned len2 = (unsigned)GetText(p, (int)(len + 1));
+    const unsigned len2 = (unsigned)GetText(p, (int)(len + 1));
     if (len > len2)
       len = len2;
   }
@@ -180,7 +180,7 @@ bool CWindow::GetText(CSysString &s)
 }
 
 #ifndef _UNICODE
-bool CWindow::GetText(UString &s)
+bool CWindow::GetText(UString &s) const
 {
   if (g_IsNT)
   {
@@ -190,7 +190,7 @@ bool CWindow::GetText(UString &s)
       return (::GetLastError() == ERROR_SUCCESS);
     wchar_t *p = s.GetBuf(len);
     {
-      unsigned len2 = (unsigned)GetWindowTextW(_window, p, (int)(len + 1));
+      const unsigned len2 = (unsigned)GetWindowTextW(_window, p, (int)(len + 1));
       if (len > len2)
         len = len2;
     }
@@ -200,7 +200,7 @@ bool CWindow::GetText(UString &s)
     return true;
   }
   CSysString sysString;
-  bool result = GetText(sysString);
+  const bool result = GetText(sysString);
   MultiByteToUnicodeString2(s, sysString);
   return result;
 }
