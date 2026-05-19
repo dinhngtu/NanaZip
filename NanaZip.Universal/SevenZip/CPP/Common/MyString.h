@@ -173,15 +173,9 @@ inline wchar_t MyCharUpper(wchar_t c) throw()
   if (c < 'a') return c;
   if (c <= 'z') return (wchar_t)(c - 0x20);
   if (c <= 0x7F) return c;
-  #ifdef _WIN32
-    #ifdef _UNICODE
-      return (wchar_t)(unsigned)(UINT_PTR)CharUpperW((LPWSTR)(UINT_PTR)(unsigned)c);
-    #else
-      return (wchar_t)MyCharUpper_WIN(c);
-    #endif
-  #else
-    return (wchar_t)towupper((wint_t)c);
-  #endif
+  // **************** NanaZip Modification Start ****************
+  return (wchar_t)towupper((wint_t)c);
+  // **************** NanaZip Modification End ****************
 }
 
 /*
