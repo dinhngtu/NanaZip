@@ -40,6 +40,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>NO_XXHASH;FL2_7ZIP_BUILD;ZSTD_LEGACY_SUPPORT;ZSTD_MULTITHREAD;NO_IMPORT_EXPORT;LFS_READONLY;LFS_MULTIVERSION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <EnableEnhancedInstructionSet Condition="'$(Platform)' == 'x64'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>NanaZip.Codecs.def</ModuleDefinitionFile>
