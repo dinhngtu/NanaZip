@@ -10,10 +10,18 @@
 
 #include <Windows.h>
 
+#include <KnownFolders.h>
+#include <atomic>
+#include <cstdarg>
+#include <exception>
+#include <ocidl.h>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
 
+#include <shlobj_core.h>
 #include <shobjidl_core.h>
+
+#include <strsafe.h>
 
 #include <winrt/Windows.Foundation.h>
 
@@ -169,6 +177,646 @@ namespace
     {
         return fs2us(NWindows::NDLL::GetModuleDirPrefix()) + L"NanaZip.Modern.FileManager.exe";
     }
+
+    static constexpr DWORD kLongRunningReportDelayMilliseconds = 10 * 1000;
+    static constexpr DWORD kLongRunningReportPeriodMilliseconds = 10 * 1000;
+
+    static std::atomic<unsigned long long> g_ProcessStartTick = 0;
+    static std::atomic<void*> g_LongRunningReportTimer = nullptr;
+    static std::atomic<bool> g_LongRunningReportTimerStarted = false;
+    static std::atomic<long> g_LogFilePathState = 0;
+    static wchar_t g_LogFilePath[MAX_PATH] = {};
+
+    struct ShellExtensionObjectCounters
+    {
+        std::atomic<long long> Created = 0;
+        std::atomic<long long> Destroyed = 0;
+    };
+
+    static ShellExtensionObjectCounters g_ExplorerCommandBaseCounters;
+    static ShellExtensionObjectCounters g_ExplorerCommandRootCounters;
+    static ShellExtensionObjectCounters g_ClassFactoryCounters;
+
+    static ULONGLONG GetProcessStartTick()
+    {
+        ULONGLONG StartTick = g_ProcessStartTick.load();
+        if (StartTick == 0)
+        {
+            ULONGLONG CurrentTick = ::GetTickCount64();
+            if (g_ProcessStartTick.compare_exchange_strong(
+                StartTick,
+                CurrentTick))
+            {
+                StartTick = CurrentTick;
+            }
+        }
+        return StartTick;
+    }
+
+    static ULONGLONG GetProcessAgeMilliseconds()
+    {
+        return ::GetTickCount64() - GetProcessStartTick();
+    }
+
+    static long long GetCurrentModuleLockCount()
+    {
+        return static_cast<long long>(winrt::get_module_lock());
+    }
+
+    static bool AppendPathComponent(
+        wchar_t* Path,
+        size_t PathCapacity,
+        const wchar_t* Component)
+    {
+        UNREFERENCED_PARAMETER(PathCapacity);
+        return !!::PathAppendW(Path, Component);
+    }
+
+    static bool CreateDirectoryIfNeeded(const wchar_t* Path)
+    {
+        if (::CreateDirectoryW(Path, nullptr))
+        {
+            return true;
+        }
+
+        return (::GetLastError() == ERROR_ALREADY_EXISTS);
+    }
+
+    static bool TryBuildLogFilePath(
+        wchar_t* Path,
+        size_t PathCapacity)
+    {
+        if (!Path || PathCapacity == 0)
+        {
+            return false;
+        }
+
+        Path[0] = L'\0';
+
+        PWSTR LocalAppData = nullptr;
+        HRESULT Result = ::SHGetKnownFolderPath(
+            FOLDERID_LocalAppData,
+            KF_FLAG_DEFAULT,
+            nullptr,
+            &LocalAppData);
+        if (SUCCEEDED(Result) && LocalAppData)
+        {
+            Result = ::StringCchCopyW(Path, PathCapacity, LocalAppData);
+            ::CoTaskMemFree(LocalAppData);
+            if (FAILED(Result))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            DWORD Length = ::GetEnvironmentVariableW(
+                L"LOCALAPPDATA",
+                Path,
+                static_cast<DWORD>(PathCapacity));
+            if (Length == 0 || Length >= PathCapacity)
+            {
+                return false;
+            }
+        }
+
+        if (!AppendPathComponent(Path, PathCapacity, L"NanaZip") ||
+            !CreateDirectoryIfNeeded(Path) ||
+            !AppendPathComponent(Path, PathCapacity, L"Logs") ||
+            !CreateDirectoryIfNeeded(Path))
+        {
+            return false;
+        }
+
+        wchar_t FileName[64];
+        if (FAILED(::StringCchPrintfW(
+            FileName,
+            ARRAYSIZE(FileName),
+            L"NanaZip.ShellExtension.%lu.log",
+            ::GetCurrentProcessId())))
+        {
+            return false;
+        }
+
+        return AppendPathComponent(Path, PathCapacity, FileName);
+    }
+
+    static bool GetLogFilePath(
+        wchar_t* Path,
+        size_t PathCapacity,
+        bool AllowInitialize)
+    {
+        if (!Path || PathCapacity == 0)
+        {
+            return false;
+        }
+
+        if (g_LogFilePathState.load(std::memory_order_acquire) == 2)
+        {
+            return SUCCEEDED(::StringCchCopyW(
+                Path,
+                PathCapacity,
+                g_LogFilePath));
+        }
+
+        if (!AllowInitialize)
+        {
+            return false;
+        }
+
+        long Expected = 0;
+        if (g_LogFilePathState.compare_exchange_strong(
+            Expected,
+            1,
+            std::memory_order_acq_rel))
+        {
+            wchar_t BuiltPath[MAX_PATH];
+            if (TryBuildLogFilePath(BuiltPath, ARRAYSIZE(BuiltPath)) &&
+                SUCCEEDED(::StringCchCopyW(
+                    g_LogFilePath,
+                    ARRAYSIZE(g_LogFilePath),
+                    BuiltPath)))
+            {
+                g_LogFilePathState.store(2, std::memory_order_release);
+                return SUCCEEDED(::StringCchCopyW(
+                    Path,
+                    PathCapacity,
+                    BuiltPath));
+            }
+
+            g_LogFilePathState.store(0, std::memory_order_release);
+            return false;
+        }
+
+        return TryBuildLogFilePath(Path, PathCapacity);
+    }
+
+    static void WriteLogLine(
+        const wchar_t* Message,
+        bool AllowLogFilePathInitialization)
+    {
+        if (!Message)
+        {
+            return;
+        }
+
+        wchar_t LogFilePath[MAX_PATH];
+        if (!GetLogFilePath(
+            LogFilePath,
+            ARRAYSIZE(LogFilePath),
+            AllowLogFilePathInitialization))
+        {
+            return;
+        }
+
+        HANDLE LogFile = ::CreateFileW(
+            LogFilePath,
+            FILE_APPEND_DATA | FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr,
+            OPEN_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (LogFile == INVALID_HANDLE_VALUE)
+        {
+            return;
+        }
+
+        LARGE_INTEGER FileSize = {};
+        if (::GetFileSizeEx(LogFile, &FileSize) && FileSize.QuadPart == 0)
+        {
+            static const BYTE kUtf8ByteOrderMark[] = { 0xEF, 0xBB, 0xBF };
+            DWORD BytesWritten = 0;
+            ::WriteFile(
+                LogFile,
+                kUtf8ByteOrderMark,
+                sizeof(kUtf8ByteOrderMark),
+                &BytesWritten,
+                nullptr);
+        }
+
+        char Utf8Message[4096];
+        int BytesToWrite = ::WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            Message,
+            -1,
+            Utf8Message,
+            ARRAYSIZE(Utf8Message),
+            nullptr,
+            nullptr);
+        if (BytesToWrite > 0)
+        {
+            DWORD BytesWritten = 0;
+            ::WriteFile(
+                LogFile,
+                Utf8Message,
+                static_cast<DWORD>(BytesToWrite - 1),
+                &BytesWritten,
+                nullptr);
+        }
+
+        ::CloseHandle(LogFile);
+    }
+
+    static void LogMessageCore(
+        bool AllowLogFilePathInitialization,
+        const wchar_t* Format,
+        va_list Arguments)
+    {
+        try
+        {
+            wchar_t Body[3072];
+            HRESULT Result = ::StringCchVPrintfW(
+                Body,
+                ARRAYSIZE(Body),
+                Format,
+                Arguments);
+            if (FAILED(Result))
+            {
+                return;
+            }
+
+            SYSTEMTIME LocalTime = {};
+            ::GetLocalTime(&LocalTime);
+
+            wchar_t Line[4096];
+            Result = ::StringCchPrintfW(
+                Line,
+                ARRAYSIZE(Line),
+                L"%04hu-%02hu-%02hu %02hu:%02hu:%02hu.%03hu "
+                L"pid=%lu tid=%lu age_ms=%llu %s\r\n",
+                LocalTime.wYear,
+                LocalTime.wMonth,
+                LocalTime.wDay,
+                LocalTime.wHour,
+                LocalTime.wMinute,
+                LocalTime.wSecond,
+                LocalTime.wMilliseconds,
+                ::GetCurrentProcessId(),
+                ::GetCurrentThreadId(),
+                GetProcessAgeMilliseconds(),
+                Body);
+            if (FAILED(Result))
+            {
+                return;
+            }
+
+            WriteLogLine(Line, AllowLogFilePathInitialization);
+        }
+        catch (...)
+        {
+        }
+    }
+
+    static void LogMessage(const wchar_t* Format, ...)
+    {
+        va_list Arguments;
+        va_start(Arguments, Format);
+        LogMessageCore(true, Format, Arguments);
+        va_end(Arguments);
+    }
+
+    static void LogMessageWithoutLogFilePathInitialization(
+        const wchar_t* Format,
+        ...)
+    {
+        va_list Arguments;
+        va_start(Arguments, Format);
+        LogMessageCore(false, Format, Arguments);
+        va_end(Arguments);
+    }
+
+    static void LogCurrentState(
+        const wchar_t* Reason,
+        bool AllowLogFilePathInitialization = true)
+    {
+        const long long BaseCreated =
+            g_ExplorerCommandBaseCounters.Created.load();
+        const long long BaseDestroyed =
+            g_ExplorerCommandBaseCounters.Destroyed.load();
+        const long long RootCreated =
+            g_ExplorerCommandRootCounters.Created.load();
+        const long long RootDestroyed =
+            g_ExplorerCommandRootCounters.Destroyed.load();
+        const long long FactoryCreated =
+            g_ClassFactoryCounters.Created.load();
+        const long long FactoryDestroyed =
+            g_ClassFactoryCounters.Destroyed.load();
+
+        if (AllowLogFilePathInitialization)
+        {
+            LogMessage(
+                L"state reason=\"%s\" module_lock=%lld "
+                L"ExplorerCommandBase=%lld/%lld(balance=%lld) "
+                L"ExplorerCommandRoot=%lld/%lld(balance=%lld) "
+                L"ClassFactory=%lld/%lld(balance=%lld)",
+                Reason ? Reason : L"",
+                GetCurrentModuleLockCount(),
+                BaseCreated,
+                BaseDestroyed,
+                BaseCreated - BaseDestroyed,
+                RootCreated,
+                RootDestroyed,
+                RootCreated - RootDestroyed,
+                FactoryCreated,
+                FactoryDestroyed,
+                FactoryCreated - FactoryDestroyed);
+        }
+        else
+        {
+            LogMessageWithoutLogFilePathInitialization(
+                L"state reason=\"%s\" module_lock=%lld "
+                L"ExplorerCommandBase=%lld/%lld(balance=%lld) "
+                L"ExplorerCommandRoot=%lld/%lld(balance=%lld) "
+                L"ClassFactory=%lld/%lld(balance=%lld)",
+                Reason ? Reason : L"",
+                GetCurrentModuleLockCount(),
+                BaseCreated,
+                BaseDestroyed,
+                BaseCreated - BaseDestroyed,
+                RootCreated,
+                RootDestroyed,
+                RootCreated - RootDestroyed,
+                FactoryCreated,
+                FactoryDestroyed,
+                FactoryCreated - FactoryDestroyed);
+        }
+    }
+
+    static void LogLifecycleEvent(
+        const wchar_t* EventName,
+        const wchar_t* Detail = L"")
+    {
+        LogMessage(
+            L"lifecycle event=%s detail=\"%s\" module_lock=%lld",
+            EventName ? EventName : L"",
+            Detail ? Detail : L"",
+            GetCurrentModuleLockCount());
+    }
+
+    static void LogLifecycleEventWithoutLogFilePathInitialization(
+        const wchar_t* EventName,
+        const wchar_t* Detail = L"")
+    {
+        LogMessageWithoutLogFilePathInitialization(
+            L"lifecycle event=%s detail=\"%s\" module_lock=%lld",
+            EventName ? EventName : L"",
+            Detail ? Detail : L"",
+            GetCurrentModuleLockCount());
+    }
+
+    static void LogLifecycleResult(
+        const wchar_t* EventName,
+        HRESULT Result)
+    {
+        LogMessage(
+            L"lifecycle event=%s result=0x%08X module_lock=%lld",
+            EventName ? EventName : L"",
+            static_cast<unsigned int>(Result),
+            GetCurrentModuleLockCount());
+    }
+
+    static void FormatGuidForLog(
+        REFGUID Guid,
+        wchar_t* Buffer,
+        size_t BufferCapacity)
+    {
+        if (!Buffer || BufferCapacity == 0)
+        {
+            return;
+        }
+
+        if (::StringFromGUID2(Guid, Buffer, static_cast<int>(BufferCapacity)) == 0)
+        {
+            ::StringCchCopyW(Buffer, BufferCapacity, L"<failed>");
+        }
+    }
+
+    static const wchar_t* GetKnownInterfaceNameForLog(REFGUID InterfaceId)
+    {
+        if (InterfaceId == IID_IUnknown)
+        {
+            return L"IUnknown";
+        }
+
+        if (InterfaceId == IID_IClassFactory)
+        {
+            return L"IClassFactory";
+        }
+
+        if (InterfaceId == __uuidof(IExplorerCommand))
+        {
+            return L"IExplorerCommand";
+        }
+
+        if (InterfaceId == __uuidof(IInitializeCommand))
+        {
+            return L"IInitializeCommand";
+        }
+
+        if (InterfaceId == __uuidof(IEnumExplorerCommand))
+        {
+            return L"IEnumExplorerCommand";
+        }
+
+        return L"<unknown>";
+    }
+
+    static void CALLBACK LongRunningReportTimerCallback(
+        PVOID Parameter,
+        BOOLEAN TimerOrWaitFired)
+    {
+        UNREFERENCED_PARAMETER(Parameter);
+        UNREFERENCED_PARAMETER(TimerOrWaitFired);
+
+        LogCurrentState(L"long-running process report");
+    }
+
+    static void StartLongRunningReportTimer()
+    {
+        bool Expected = false;
+        if (!g_LongRunningReportTimerStarted.compare_exchange_strong(
+            Expected,
+            true))
+        {
+            return;
+        }
+
+        HANDLE Timer = nullptr;
+        if (::CreateTimerQueueTimer(
+            &Timer,
+            nullptr,
+            LongRunningReportTimerCallback,
+            nullptr,
+            kLongRunningReportDelayMilliseconds,
+            kLongRunningReportPeriodMilliseconds,
+            WT_EXECUTEDEFAULT))
+        {
+            g_LongRunningReportTimer.store(Timer);
+        }
+        else
+        {
+            g_LongRunningReportTimerStarted.store(false);
+        }
+    }
+
+    static void StopLongRunningReportTimer(bool WaitForCallback)
+    {
+        HANDLE Timer = static_cast<HANDLE>(
+            g_LongRunningReportTimer.exchange(nullptr));
+        if (!Timer)
+        {
+            g_LongRunningReportTimerStarted.store(false);
+            return;
+        }
+
+        HANDLE CompletionEvent = WaitForCallback ? INVALID_HANDLE_VALUE : nullptr;
+        if (!::DeleteTimerQueueTimer(nullptr, Timer, CompletionEvent) &&
+            ::GetLastError() != ERROR_IO_PENDING &&
+            WaitForCallback)
+        {
+            LogMessage(
+                L"timer delete failed error=%lu module_lock=%lld",
+                ::GetLastError(),
+                GetCurrentModuleLockCount());
+        }
+
+        g_LongRunningReportTimerStarted.store(false);
+    }
+
+    static ShellExtensionObjectCounters& GetObjectCounters(
+        const wchar_t* ObjectName)
+    {
+        if (wcscmp(ObjectName, L"ExplorerCommandRoot") == 0)
+        {
+            return g_ExplorerCommandRootCounters;
+        }
+
+        if (wcscmp(ObjectName, L"ClassFactory") == 0)
+        {
+            return g_ClassFactoryCounters;
+        }
+
+        return g_ExplorerCommandBaseCounters;
+    }
+
+    static void LogObjectEvent(
+        const wchar_t* ObjectName,
+        const void* ObjectAddress,
+        bool Created,
+        DWORD CommandID = static_cast<DWORD>(-1),
+        bool WriteEventLog = true)
+    {
+        StartLongRunningReportTimer();
+
+        ShellExtensionObjectCounters& Counters = GetObjectCounters(ObjectName);
+        long long CreatedCount = Counters.Created.load();
+        long long DestroyedCount = Counters.Destroyed.load();
+        if (Created)
+        {
+            CreatedCount = Counters.Created.fetch_add(1) + 1;
+        }
+        else
+        {
+            DestroyedCount = Counters.Destroyed.fetch_add(1) + 1;
+        }
+
+        if (WriteEventLog)
+        {
+            LogMessage(
+                L"object event=%s type=%s this=%p command_id=%lu "
+                L"module_lock=%lld created=%lld destroyed=%lld balance=%lld",
+                Created ? L"created" : L"destroyed",
+                ObjectName,
+                ObjectAddress,
+                CommandID,
+                GetCurrentModuleLockCount(),
+                CreatedCount,
+                DestroyedCount,
+                CreatedCount - DestroyedCount);
+        }
+    }
+
+    struct ShellExtensionPublicFunctionScope
+    {
+        const wchar_t* FunctionName;
+        const void* ObjectAddress;
+        DWORD CommandID;
+        int UncaughtExceptionCount;
+
+        explicit ShellExtensionPublicFunctionScope(
+            const wchar_t* functionName,
+            const void* objectAddress = nullptr,
+            DWORD commandID = static_cast<DWORD>(-1)) :
+            FunctionName(functionName),
+            ObjectAddress(objectAddress),
+            CommandID(commandID),
+            UncaughtExceptionCount(std::uncaught_exceptions())
+        {
+            StartLongRunningReportTimer();
+            LogMessage(
+                L"public interface enter function=%s this=%p command_id=%lu "
+                L"module_lock=%lld",
+                FunctionName,
+                ObjectAddress,
+                CommandID,
+                GetCurrentModuleLockCount());
+        }
+
+        ~ShellExtensionPublicFunctionScope()
+        {
+            if (std::uncaught_exceptions() > UncaughtExceptionCount)
+            {
+                LogMessage(
+                    L"public interface exception escaping function=%s "
+                    L"module_lock=%lld",
+                    FunctionName,
+                    GetCurrentModuleLockCount());
+                LogCurrentState(L"exception escaping public interface");
+            }
+            else
+            {
+                LogMessage(
+                    L"public interface leave function=%s this=%p "
+                    L"command_id=%lu module_lock=%lld",
+                    FunctionName,
+                    ObjectAddress,
+                    CommandID,
+                    GetCurrentModuleLockCount());
+            }
+        }
+    };
+
+    static HRESULT LogCurrentPublicInterfaceExceptionAndReturn(
+        const wchar_t* FunctionName)
+    {
+        HRESULT Result = winrt::to_hresult();
+        LogMessage(
+            L"public interface exception caught function=%s hresult=0x%08X "
+            L"module_lock=%lld",
+            FunctionName,
+            static_cast<unsigned int>(Result),
+            GetCurrentModuleLockCount());
+        LogCurrentState(L"exception caught in public interface");
+        return Result;
+    }
+
+#define NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE(functionName) \
+    ShellExtensionPublicFunctionScope PublicFunctionScope(functionName)
+
+#define NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(functionName) \
+    ShellExtensionPublicFunctionScope PublicFunctionScope(functionName, this)
+
+#define NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_COMMAND(functionName) \
+    ShellExtensionPublicFunctionScope PublicFunctionScope( \
+        functionName, this, this->m_CommandID)
+
+#define NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(functionName) \
+    catch (...) \
+    { \
+        return LogCurrentPublicInterfaceExceptionAndReturn(functionName); \
+    }
 }
 
 namespace NanaZip::ShellExtension
@@ -205,6 +853,44 @@ namespace NanaZip::ShellExtension
         };
     }
 
+    namespace CommandGuid
+    {
+        static const GUID Root =
+        { 0x469d94e9, 0x6af4, 0x4395, { 0xb3, 0x96, 0x99, 0xb1, 0x30, 0x8f, 0x8c, 0xe5 } };
+
+        static const GUID Values[CommandID::Maximum] =
+        {
+            { 0x00000000, 0x0000, 0x0000, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x01 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x02 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x03 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x04 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x05 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x06 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x07 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x08 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x09 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x0a } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x0b } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x0c } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x0d } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x0e } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x0f } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x10 } },
+            { 0xb7e5a6e4, 0x8c25, 0x4d48, { 0x9d, 0x8f, 0x2b, 0x7d, 0x2d, 0x99, 0xe1, 0x11 } }
+        };
+    }
+
+    static const GUID* GetCanonicalGuidForCommandID(DWORD commandID)
+    {
+        if (commandID == CommandID::None || commandID >= CommandID::Maximum)
+        {
+            return nullptr;
+        }
+
+        return &CommandGuid::Values[commandID];
+    }
+
     using SubCommandList = std::vector<winrt::com_ptr<IExplorerCommand>>;
     using SubCommandListIterator = SubCommandList::const_iterator;
 
@@ -234,6 +920,22 @@ namespace NanaZip::ShellExtension
             m_WriteZone(WriteZone)
         {
             this->m_IsSeparator = (this->m_CommandID == CommandID::None);
+            LogObjectEvent(
+                L"ExplorerCommandBase",
+                this,
+                true,
+                this->m_CommandID,
+                false);
+        }
+
+        ~ExplorerCommandBase()
+        {
+            LogObjectEvent(
+                L"ExplorerCommandBase",
+                this,
+                false,
+                this->m_CommandID,
+                false);
         }
 
 #pragma region IExplorerCommand
@@ -242,41 +944,92 @@ namespace NanaZip::ShellExtension
             _In_opt_ IShellItemArray* psiItemArray,
             _Outptr_ LPWSTR* ppszName)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
-
-            if (this->m_IsSeparator)
+            try
             {
-                *ppszName = nullptr;
-                return S_FALSE;
-            }
+                UNREFERENCED_PARAMETER(psiItemArray);
 
-            return ::SHStrDupW(this->m_Title.c_str(), ppszName);
+                if (this->m_IsSeparator)
+                {
+                    *ppszName = nullptr;
+                    return S_FALSE;
+                }
+
+                return ::SHStrDupW(this->m_Title.c_str(), ppszName);
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::GetTitle")
         }
 
         HRESULT STDMETHODCALLTYPE GetIcon(
             _In_opt_ IShellItemArray* psiItemArray,
             _Outptr_ LPWSTR* ppszIcon)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
+            try
+            {
+                UNREFERENCED_PARAMETER(psiItemArray);
 
-            *ppszIcon = nullptr;
-            return E_NOTIMPL;
+                *ppszIcon = nullptr;
+                return E_NOTIMPL;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::GetIcon")
         }
 
         HRESULT STDMETHODCALLTYPE GetToolTip(
             _In_opt_ IShellItemArray* psiItemArray,
             _Outptr_ LPWSTR* ppszInfotip)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
-            *ppszInfotip = nullptr;
-            return E_NOTIMPL;
+            try
+            {
+                UNREFERENCED_PARAMETER(psiItemArray);
+                *ppszInfotip = nullptr;
+                return E_NOTIMPL;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::GetToolTip")
         }
 
         HRESULT STDMETHODCALLTYPE GetCanonicalName(
             _Out_ GUID* pguidCommandName)
         {
-            *pguidCommandName = GUID_NULL;
-            return E_NOTIMPL;
+            try
+            {
+                const GUID* CommandGuid = GetCanonicalGuidForCommandID(
+                    this->m_CommandID);
+                if (!CommandGuid)
+                {
+                    *pguidCommandName = GUID_NULL;
+                    LogMessage(
+                        L"canonical name result type=ExplorerCommandBase "
+                        L"this=%p command_id=%lu result=0x%08X "
+                        L"reason=\"no command guid\" module_lock=%lld",
+                        this,
+                        this->m_CommandID,
+                        static_cast<unsigned int>(E_NOTIMPL),
+                        GetCurrentModuleLockCount());
+                    return E_NOTIMPL;
+                }
+
+                *pguidCommandName = *CommandGuid;
+
+                wchar_t GuidText[64];
+                FormatGuidForLog(
+                    *pguidCommandName,
+                    GuidText,
+                    ARRAYSIZE(GuidText));
+                LogMessage(
+                    L"canonical name result type=ExplorerCommandBase "
+                    L"this=%p command_id=%lu result=0x%08X guid=%s "
+                    L"module_lock=%lld",
+                    this,
+                    this->m_CommandID,
+                    static_cast<unsigned int>(S_OK),
+                    GuidText,
+                    GetCurrentModuleLockCount());
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::GetCanonicalName")
         }
 
         HRESULT STDMETHODCALLTYPE GetState(
@@ -284,22 +1037,29 @@ namespace NanaZip::ShellExtension
             _In_ BOOL fOkToBeSlow,
             _Out_ EXPCMDSTATE* pCmdState)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
-            UNREFERENCED_PARAMETER(fOkToBeSlow);
-            *pCmdState = ECS_ENABLED;
-            return S_OK;
+            try
+            {
+                UNREFERENCED_PARAMETER(psiItemArray);
+                UNREFERENCED_PARAMETER(fOkToBeSlow);
+                *pCmdState = ECS_ENABLED;
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::GetState")
         }
 
         HRESULT STDMETHODCALLTYPE Invoke(
             _In_opt_ IShellItemArray* psiItemArray,
             _In_opt_ IBindCtx* pbc)
         {
-            UNREFERENCED_PARAMETER(pbc);
-
-            if (this->m_IsSeparator)
+            try
             {
-                return E_NOTIMPL;
-            }
+                UNREFERENCED_PARAMETER(pbc);
+
+                if (this->m_IsSeparator)
+                {
+                    return E_NOTIMPL;
+                }
 
             std::vector<std::wstring> FilePaths;
             if (psiItemArray)
@@ -408,12 +1168,24 @@ namespace NanaZip::ShellExtension
             std::wstring ArchiveName7z = ArchiveName + L".7z";
             std::wstring ArchiveNameZip = ArchiveName + L".zip";
 
+            LogMessage(
+                L"command invoke dispatch this=%p command_id=%lu "
+                L"file_count=%llu need_extract=%u module_lock=%lld",
+                this,
+                this->m_CommandID,
+                static_cast<unsigned long long>(FilePaths.size()),
+                NeedExtract ? 1u : 0u,
+                GetCurrentModuleLockCount());
+
             switch (this->m_CommandID)
             {
             case CommandID::Open:
             {
                 if (FilePaths.size() != 1)
                 {
+                    LogLifecycleEvent(
+                        L"open_command_skip",
+                        L"file count is not one");
                     break;
                 }
 
@@ -421,17 +1193,30 @@ namespace NanaZip::ShellExtension
                     FilePaths[0].c_str());
                 if (FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
                 {
+                    LogLifecycleEvent(
+                        L"open_command_skip",
+                        L"target is directory");
                     break;
                 }
 
                 if (!DoNeedExtract(FilePaths[0].c_str()))
                 {
+                    LogLifecycleEvent(
+                        L"open_command_skip",
+                        L"target does not need extract");
                     break;
                 }
 
                 UString params;
                 params = GetQuotedString(FilePaths[0].c_str());
-                NWindows::MyCreateProcess(::GetNanaZipPath(), params);
+                WRes Result = NWindows::MyCreateProcess(
+                    ::GetNanaZipPath(),
+                    params);
+                LogMessage(
+                    L"lifecycle event=open_command_process_create_return "
+                    L"result=%u module_lock=%lld",
+                    static_cast<unsigned int>(Result),
+                    GetCurrentModuleLockCount());
 
                 break;
             }
@@ -546,34 +1331,50 @@ namespace NanaZip::ShellExtension
                 break;
             }
 
-            return S_OK;
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::Invoke")
         }
 
         HRESULT STDMETHODCALLTYPE GetFlags(
             _Out_ EXPCMDFLAGS* pFlags)
         {
-            *pFlags =
-                this->m_IsSeparator
-                ? ECF_ISSEPARATOR
-                : ECF_DEFAULT;
-            return S_OK;
+            try
+            {
+                *pFlags =
+                    this->m_IsSeparator
+                    ? ECF_ISSEPARATOR
+                    : ECF_DEFAULT;
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::GetFlags")
         }
 
         HRESULT STDMETHODCALLTYPE EnumSubCommands(
             _Outptr_ IEnumExplorerCommand** ppEnum)
         {
-            *ppEnum = nullptr;
-            return E_NOTIMPL;
+            try
+            {
+                *ppEnum = nullptr;
+                return E_NOTIMPL;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandBase::EnumSubCommands")
         }
 
 #pragma endregion
+
     };
 
 
     struct ExplorerCommandRoot : public winrt::implements<
         ExplorerCommandRoot,
         IExplorerCommand,
-        IEnumExplorerCommand>
+        IEnumExplorerCommand,
+        IInitializeCommand,
+        winrt::non_agile>
     {
     private:
 
@@ -593,6 +1394,7 @@ namespace NanaZip::ShellExtension
             }
 
             m_Initialized = true;
+            LogLifecycleEvent(L"root_initialize_enter");
 
             std::vector<std::wstring> FilePaths;
             if (psiItemArray)
@@ -622,6 +1424,9 @@ namespace NanaZip::ShellExtension
 
             if (FilePaths.empty())
             {
+                LogLifecycleEvent(
+                    L"root_initialize_return",
+                    L"no file paths");
                 return;
             }
 
@@ -681,6 +1486,9 @@ namespace NanaZip::ShellExtension
                 {
                     if (!FileInfo0.Find(us2fs(FileName)))
                     {
+                        LogLifecycleEvent(
+                            L"root_initialize_return",
+                            L"file info unavailable");
                         return;
                     }
                     NWindows::NFile::NDir::GetOnlyDirPrefix(
@@ -912,9 +1720,97 @@ namespace NanaZip::ShellExtension
                         L"*",
                         CommandID::HashAll));
             }
+
+            LogMessage(
+                L"lifecycle event=root_initialize_return detail=\"completed\" "
+                L"subcommands=%llu need_extract=%u module_lock=%lld",
+                static_cast<unsigned long long>(this->m_SubCommands.size()),
+                NeedExtract ? 1u : 0u,
+                GetCurrentModuleLockCount());
         }
 
     public:
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(
+            _In_ REFIID riid,
+            _COM_Outptr_ void** ppvObject) noexcept override
+        {
+            wchar_t InterfaceId[64];
+            FormatGuidForLog(riid, InterfaceId, ARRAYSIZE(InterfaceId));
+            HRESULT Result = root_implements_type::QueryInterface(
+                riid,
+                ppvObject);
+
+            try
+            {
+                LogMessage(
+                    L"lifecycle event=root_query_interface_return "
+                    L"this=%p riid=%s riid_name=%s result=0x%08X "
+                    L"returned_object=%p module_lock=%lld",
+                    this,
+                    InterfaceId,
+                    GetKnownInterfaceNameForLog(riid),
+                    static_cast<unsigned int>(Result),
+                    ppvObject ? *ppvObject : nullptr,
+                    GetCurrentModuleLockCount());
+            }
+            catch (...)
+            {
+            }
+
+            return Result;
+        }
+
+        ULONG STDMETHODCALLTYPE AddRef() noexcept override
+        {
+            ULONG Result = root_implements_type::AddRef();
+            try
+            {
+                LogMessage(
+                    L"lifecycle event=root_add_ref_return this=%p "
+                    L"ref_count=%lu module_lock=%lld",
+                    this,
+                    Result,
+                    GetCurrentModuleLockCount());
+            }
+            catch (...)
+            {
+            }
+
+            return Result;
+        }
+
+        ULONG STDMETHODCALLTYPE Release() noexcept override
+        {
+            void* This = this;
+            try
+            {
+                LogMessage(
+                    L"lifecycle event=root_release_enter this=%p "
+                    L"module_lock=%lld",
+                    This,
+                    GetCurrentModuleLockCount());
+            }
+            catch (...)
+            {
+            }
+
+            ULONG Result = root_implements_type::Release();
+            try
+            {
+                LogMessage(
+                    L"lifecycle event=root_release_return this=%p "
+                    L"ref_count=%lu module_lock=%lld",
+                    This,
+                    Result,
+                    GetCurrentModuleLockCount());
+            }
+            catch (...)
+            {
+            }
+
+            return Result;
+        }
 
         ExplorerCommandRoot()
         {
@@ -922,6 +1818,12 @@ namespace NanaZip::ShellExtension
             ContextMenuInfo.Load();
             this->m_ContextMenuFlags = ContextMenuInfo.Flags;
             this->m_ContextMenuElimDup = ContextMenuInfo.ElimDup;
+            LogObjectEvent(L"ExplorerCommandRoot", this, true);
+        }
+
+        ~ExplorerCommandRoot()
+        {
+            LogObjectEvent(L"ExplorerCommandRoot", this, false);
         }
 
 #pragma region IExplorerCommand
@@ -930,42 +1832,83 @@ namespace NanaZip::ShellExtension
             _In_opt_ IShellItemArray* psiItemArray,
             _Outptr_ LPWSTR* ppszName)
         {
-            this->Initialize(psiItemArray);
-
-            if (this->m_SubCommands.empty())
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::GetTitle");
+            try
             {
-                *ppszName = nullptr;
-                return E_NOTIMPL;
-            }
+                this->Initialize(psiItemArray);
 
-            return ::SHStrDupW(L"NanaZip Preview", ppszName);
+                if (this->m_SubCommands.empty())
+                {
+                    *ppszName = nullptr;
+                    return E_NOTIMPL;
+                }
+
+                return ::SHStrDupW(L"NanaZip Preview", ppszName);
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::GetTitle")
         }
 
         HRESULT STDMETHODCALLTYPE GetIcon(
             _In_opt_ IShellItemArray* psiItemArray,
             _Outptr_ LPWSTR* ppszIcon)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
-            UString Path = ::GetNanaZipPath();
-            std::wstring Icon = std::wstring(Path.Ptr(), Path.Len());
-            Icon += L",-1";
-            return ::SHStrDupW(Icon.c_str(), ppszIcon);
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::GetIcon");
+            try
+            {
+                UNREFERENCED_PARAMETER(psiItemArray);
+                UString Path = ::GetNanaZipPath();
+                std::wstring Icon = std::wstring(Path.Ptr(), Path.Len());
+                Icon += L",-1";
+                return ::SHStrDupW(Icon.c_str(), ppszIcon);
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::GetIcon")
         }
 
         HRESULT STDMETHODCALLTYPE GetToolTip(
             _In_opt_ IShellItemArray* psiItemArray,
             _Outptr_ LPWSTR* ppszInfotip)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
-            *ppszInfotip = nullptr;
-            return E_NOTIMPL;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::GetToolTip");
+            try
+            {
+                UNREFERENCED_PARAMETER(psiItemArray);
+                *ppszInfotip = nullptr;
+                return E_NOTIMPL;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::GetToolTip")
         }
 
         HRESULT STDMETHODCALLTYPE GetCanonicalName(
             _Out_ GUID* pguidCommandName)
         {
-            *pguidCommandName = GUID_NULL;
-            return E_NOTIMPL;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::GetCanonicalName");
+            try
+            {
+                *pguidCommandName = CommandGuid::Root;
+
+                wchar_t GuidText[64];
+                FormatGuidForLog(
+                    *pguidCommandName,
+                    GuidText,
+                    ARRAYSIZE(GuidText));
+                LogMessage(
+                    L"canonical name result type=ExplorerCommandRoot "
+                    L"this=%p result=0x%08X guid=%s module_lock=%lld",
+                    this,
+                    static_cast<unsigned int>(S_OK),
+                    GuidText,
+                    GetCurrentModuleLockCount());
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::GetCanonicalName")
         }
 
         HRESULT STDMETHODCALLTYPE GetState(
@@ -973,41 +1916,84 @@ namespace NanaZip::ShellExtension
             _In_ BOOL fOkToBeSlow,
             _Out_ EXPCMDSTATE* pCmdState)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
-            UNREFERENCED_PARAMETER(fOkToBeSlow);
-            *pCmdState = ECS_ENABLED;
-            return S_OK;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::GetState");
+            try
+            {
+                UNREFERENCED_PARAMETER(psiItemArray);
+                UNREFERENCED_PARAMETER(fOkToBeSlow);
+                *pCmdState = ECS_ENABLED;
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::GetState")
         }
 
         HRESULT STDMETHODCALLTYPE Invoke(
             _In_opt_ IShellItemArray* psiItemArray,
             _In_opt_ IBindCtx* pbc)
         {
-            UNREFERENCED_PARAMETER(psiItemArray);
-            UNREFERENCED_PARAMETER(pbc);
-            return E_NOTIMPL;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::Invoke");
+            try
+            {
+                UNREFERENCED_PARAMETER(psiItemArray);
+                UNREFERENCED_PARAMETER(pbc);
+                return E_NOTIMPL;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::Invoke")
         }
 
         HRESULT STDMETHODCALLTYPE GetFlags(
             _Out_ EXPCMDFLAGS* pFlags)
         {
-            *pFlags = ECF_HASSUBCOMMANDS;
-            return S_OK;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::GetFlags");
+            try
+            {
+                *pFlags = ECF_HASSUBCOMMANDS;
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::GetFlags")
         }
 
         HRESULT STDMETHODCALLTYPE EnumSubCommands(
             _Outptr_ IEnumExplorerCommand** ppEnum)
         {
-            if (this->m_SubCommands.empty())
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::EnumSubCommands");
+            try
             {
-                *ppEnum = nullptr;
-                return E_NOTIMPL;
+                LogMessage(
+                    L"lifecycle event=enum_subcommands_enter "
+                    L"subcommands=%llu module_lock=%lld",
+                    static_cast<unsigned long long>(
+                        this->m_SubCommands.size()),
+                    GetCurrentModuleLockCount());
+
+                if (this->m_SubCommands.empty())
+                {
+                    *ppEnum = nullptr;
+                    LogLifecycleResult(
+                        L"enum_subcommands_return",
+                        E_NOTIMPL);
+                    return E_NOTIMPL;
+                }
+                else
+                {
+                    this->m_CurrentSubCommand = this->m_SubCommands.cbegin();
+                    HRESULT Result = this->QueryInterface(
+                        IID_PPV_ARGS(ppEnum));
+                    LogLifecycleResult(
+                        L"enum_subcommands_return",
+                        Result);
+                    return Result;
+                }
             }
-            else
-            {
-                this->m_CurrentSubCommand = this->m_SubCommands.cbegin();
-                return this->QueryInterface(IID_PPV_ARGS(ppEnum));
-            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::EnumSubCommands")
         }
 
 #pragma endregion
@@ -1019,48 +2005,103 @@ namespace NanaZip::ShellExtension
             _Out_ IExplorerCommand** pUICommand,
             _Out_opt_ ULONG* pceltFetched)
         {
-            ULONG Fetched = 0;
-
-            for (
-                ULONG i = 0;
-                (i < celt) &&
-                (this->m_CurrentSubCommand != this->m_SubCommands.cend());
-                ++i)
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::Next");
+            try
             {
-                this->m_CurrentSubCommand->copy_to(&pUICommand[i]);
-                ++Fetched;
-                ++this->m_CurrentSubCommand;
-            }
+                ULONG Fetched = 0;
 
-            if (pceltFetched)
-            {
-                *pceltFetched = Fetched;
-            }
+                for (
+                    ULONG i = 0;
+                    (i < celt) &&
+                    (this->m_CurrentSubCommand != this->m_SubCommands.cend());
+                    ++i)
+                {
+                    this->m_CurrentSubCommand->copy_to(&pUICommand[i]);
+                    ++Fetched;
+                    ++this->m_CurrentSubCommand;
+                }
 
-            return (Fetched == celt) ? S_OK : S_FALSE;
+                if (pceltFetched)
+                {
+                    *pceltFetched = Fetched;
+                }
+
+                return (Fetched == celt) ? S_OK : S_FALSE;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::Next")
         }
 
         HRESULT STDMETHODCALLTYPE Skip(
             _In_ ULONG celt)
         {
-            UNREFERENCED_PARAMETER(celt);
-            return E_NOTIMPL;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::Skip");
+            try
+            {
+                UNREFERENCED_PARAMETER(celt);
+                return E_NOTIMPL;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::Skip")
         }
 
         HRESULT STDMETHODCALLTYPE Reset()
         {
-            this->m_CurrentSubCommand = this->m_SubCommands.cbegin();
-            return S_OK;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::Reset");
+            try
+            {
+                this->m_CurrentSubCommand = this->m_SubCommands.cbegin();
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::Reset")
         }
 
         HRESULT STDMETHODCALLTYPE Clone(
             _Out_ IEnumExplorerCommand** ppenum)
         {
-            *ppenum = nullptr;
-            return E_NOTIMPL;
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::Clone");
+            try
+            {
+                *ppenum = nullptr;
+                return E_NOTIMPL;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::Clone")
         }
 
 #pragma endregion
+
+#pragma region IInitializeCommand
+
+        HRESULT STDMETHODCALLTYPE Initialize(
+            _In_ PCWSTR pszCommandName,
+            _In_ IPropertyBag* ppb)
+        {
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ExplorerCommandRoot::Initialize");
+            try
+            {
+                LogMessage(
+                    L"lifecycle event=root_initialize_command "
+                    L"this=%p command_name=\"%s\" property_bag=%p "
+                    L"module_lock=%lld",
+                    this,
+                    pszCommandName ? pszCommandName : L"",
+                    ppb,
+                    GetCurrentModuleLockCount());
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ExplorerCommandRoot::Initialize")
+        }
+
+#pragma endregion
+
     };
 
     struct DECLSPEC_UUID("469D94E9-6AF4-4395-B396-99B1308F8CE5")
@@ -1069,50 +2110,109 @@ namespace NanaZip::ShellExtension
     {
     public:
 
+        ClassFactory()
+        {
+            LogObjectEvent(L"ClassFactory", this, true);
+        }
+
+        ~ClassFactory()
+        {
+            LogObjectEvent(L"ClassFactory", this, false);
+        }
+
         HRESULT STDMETHODCALLTYPE CreateInstance(
             _In_opt_ IUnknown* pUnkOuter,
             _In_ REFIID riid,
             _COM_Outptr_ void** ppvObject) noexcept override
         {
-            UNREFERENCED_PARAMETER(pUnkOuter);
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ClassFactory::CreateInstance");
 
             try
             {
-                return winrt::make<ExplorerCommandRoot>()->QueryInterface(
+                wchar_t InterfaceId[64];
+                FormatGuidForLog(riid, InterfaceId, ARRAYSIZE(InterfaceId));
+                LogMessage(
+                    L"lifecycle event=class_factory_create_instance_request "
+                    L"this=%p outer=%p riid=%s riid_name=%s ppv=%p "
+                    L"module_lock=%lld",
+                    this,
+                    pUnkOuter,
+                    InterfaceId,
+                    GetKnownInterfaceNameForLog(riid),
+                    ppvObject,
+                    GetCurrentModuleLockCount());
+
+                LogLifecycleEvent(L"class_factory_create_instance_enter");
+                HRESULT Result = winrt::make<ExplorerCommandRoot>()->QueryInterface(
                     riid, ppvObject);
+                LogMessage(
+                    L"lifecycle event=class_factory_create_instance_result "
+                    L"result=0x%08X returned_object=%p module_lock=%lld",
+                    static_cast<unsigned int>(Result),
+                    ppvObject ? *ppvObject : nullptr,
+                    GetCurrentModuleLockCount());
+                LogLifecycleResult(
+                    L"class_factory_create_instance_return",
+                    Result);
+                return Result;
             }
-            catch (...)
-            {
-                return winrt::to_hresult();
-            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ClassFactory::CreateInstance")
         }
 
         HRESULT STDMETHODCALLTYPE LockServer(
             _In_ BOOL fLock) noexcept override
         {
-            if (fLock)
+            NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE_THIS(
+                L"ClassFactory::LockServer");
+            try
             {
-                ++winrt::get_module_lock();
-            }
-            else
-            {
-                --winrt::get_module_lock();
-            }
+                const long long LockCountBefore = GetCurrentModuleLockCount();
+                if (fLock)
+                {
+                    ++winrt::get_module_lock();
+                }
+                else
+                {
+                    --winrt::get_module_lock();
+                }
 
-            return S_OK;
+                LogMessage(
+                    L"lockserver lock=%u module_lock_before=%lld "
+                    L"module_lock_after=%lld",
+                    static_cast<unsigned int>(fLock),
+                    LockCountBefore,
+                    GetCurrentModuleLockCount());
+
+                return S_OK;
+            }
+            NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(
+                L"ClassFactory::LockServer")
         }
     };
 }
 
 EXTERN_C HRESULT STDAPICALLTYPE DllCanUnloadNow()
 {
-    if (winrt::get_module_lock())
+    NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE(L"DllCanUnloadNow");
+    try
     {
-        return S_FALSE;
-    }
+        LogLifecycleEvent(L"dll_can_unload_now_enter");
+        if (winrt::get_module_lock())
+        {
+            LogCurrentState(L"DllCanUnloadNow returning S_FALSE");
+            LogLifecycleResult(L"dll_can_unload_now_return", S_FALSE);
+            return S_FALSE;
+        }
 
-    winrt::clear_factory_cache();
-    return S_OK;
+        LogCurrentState(L"DllCanUnloadNow returning S_OK");
+        LogLifecycleResult(L"dll_can_unload_now_return", S_OK);
+        StopLongRunningReportTimer(true);
+        winrt::clear_factory_cache();
+        return S_OK;
+    }
+    NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(L"DllCanUnloadNow")
 }
 
 EXTERN_C HRESULT STDAPICALLTYPE DllGetClassObject(
@@ -1120,30 +2220,52 @@ EXTERN_C HRESULT STDAPICALLTYPE DllGetClassObject(
     _In_ REFIID riid,
     _Outptr_ LPVOID* ppv)
 {
-    if (!ppv)
-    {
-        return E_POINTER;
-    }
-
-    if (riid != IID_IClassFactory && riid != IID_IUnknown)
-    {
-        return E_NOINTERFACE;
-    }
-
-    if (rclsid != __uuidof(NanaZip::ShellExtension::ClassFactory))
-    {
-        return E_INVALIDARG;
-    }
-
+    NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE(L"DllGetClassObject");
     try
     {
-        return winrt::make<NanaZip::ShellExtension::ClassFactory>(
+        LogLifecycleEvent(L"dll_get_class_object_enter");
+        wchar_t ClassId[64];
+        wchar_t InterfaceId[64];
+        FormatGuidForLog(rclsid, ClassId, ARRAYSIZE(ClassId));
+        FormatGuidForLog(riid, InterfaceId, ARRAYSIZE(InterfaceId));
+        LogMessage(
+            L"lifecycle event=dll_get_class_object_request "
+            L"rclsid=%s riid=%s riid_name=%s ppv=%p module_lock=%lld",
+            ClassId,
+            InterfaceId,
+            GetKnownInterfaceNameForLog(riid),
+            ppv,
+            GetCurrentModuleLockCount());
+        if (!ppv)
+        {
+            LogLifecycleResult(L"dll_get_class_object_return", E_POINTER);
+            return E_POINTER;
+        }
+
+        if (riid != IID_IClassFactory && riid != IID_IUnknown)
+        {
+            LogLifecycleResult(L"dll_get_class_object_return", E_NOINTERFACE);
+            return E_NOINTERFACE;
+        }
+
+        if (rclsid != __uuidof(NanaZip::ShellExtension::ClassFactory))
+        {
+            LogLifecycleResult(L"dll_get_class_object_return", E_INVALIDARG);
+            return E_INVALIDARG;
+        }
+
+        HRESULT Result = winrt::make<NanaZip::ShellExtension::ClassFactory>(
             )->QueryInterface(riid, ppv);
+        LogMessage(
+            L"lifecycle event=dll_get_class_object_result "
+            L"result=0x%08X returned_object=%p module_lock=%lld",
+            static_cast<unsigned int>(Result),
+            ppv ? *ppv : nullptr,
+            GetCurrentModuleLockCount());
+        LogLifecycleResult(L"dll_get_class_object_return", Result);
+        return Result;
     }
-    catch (...)
-    {
-        return winrt::to_hresult();
-    }
+    NANAZIP_SHELL_EXTENSION_PUBLIC_CATCH(L"DllGetClassObject")
 }
 
 long g_DllRefCount = 0;
@@ -1164,6 +2286,7 @@ BOOL WINAPI DllMain(
     {
     case DLL_PROCESS_ATTACH:
     {
+        g_ProcessStartTick.store(::GetTickCount64());
         g_hInstance = hinstDLL;
         ::K7ModernCurrentModule = hinstDLL;
         break;
@@ -1173,6 +2296,12 @@ BOOL WINAPI DllMain(
     case DLL_THREAD_DETACH:
         break;
     case DLL_PROCESS_DETACH:
+        LogLifecycleEventWithoutLogFilePathInitialization(
+            L"dll_process_detach_enter");
+        LogCurrentState(L"dll_process_detach final state", false);
+        StopLongRunningReportTimer(false);
+        LogLifecycleEventWithoutLogFilePathInitialization(
+            L"dll_process_detach_leave");
         break;
     }
     return TRUE;
