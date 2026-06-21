@@ -10,6 +10,7 @@
 
 #include <Windows.h>
 
+#include <combaseapi.h>
 #include <KnownFolders.h>
 #include <atomic>
 #include <cstdarg>
@@ -186,6 +187,13 @@ namespace
     static std::atomic<bool> g_LongRunningReportTimerStarted = false;
     static std::atomic<long> g_LogFilePathState = 0;
     static wchar_t g_LogFilePath[MAX_PATH] = {};
+    static constexpr unsigned long kComProcessReferenceProbeUnavailable =
+        static_cast<unsigned long>(-1);
+    static std::atomic<unsigned long> g_ProcessAttachComProcessRefAfterAdd =
+        kComProcessReferenceProbeUnavailable;
+    static std::atomic<unsigned long> g_ProcessAttachComProcessRefAfterRelease =
+        kComProcessReferenceProbeUnavailable;
+    static std::atomic<bool> g_ProcessAttachComProcessRefLogged = false;
 
     struct ShellExtensionObjectCounters
     {
@@ -221,6 +229,20 @@ namespace
     static long long GetCurrentModuleLockCount()
     {
         return static_cast<long long>(winrt::get_module_lock());
+    }
+
+    struct ComServerProcessReferenceProbe
+    {
+        unsigned long AfterAdd = 0;
+        unsigned long AfterRelease = 0;
+    };
+
+    static ComServerProcessReferenceProbe ProbeComServerProcessReferenceForLog()
+    {
+        ComServerProcessReferenceProbe Probe;
+        Probe.AfterAdd = ::CoAddRefServerProcess();
+        Probe.AfterRelease = ::CoReleaseServerProcess();
+        return Probe;
     }
 
     static bool AppendPathComponent(
@@ -487,6 +509,38 @@ namespace
         va_end(Arguments);
     }
 
+    static void LogProcessAttachComProcessReferenceProbe()
+    {
+        bool Expected = false;
+        if (!g_ProcessAttachComProcessRefLogged.compare_exchange_strong(
+            Expected,
+            true))
+        {
+            return;
+        }
+
+        const unsigned long AfterAdd =
+            g_ProcessAttachComProcessRefAfterAdd.load();
+        const unsigned long AfterRelease =
+            g_ProcessAttachComProcessRefAfterRelease.load();
+        if (AfterAdd == kComProcessReferenceProbeUnavailable ||
+            AfterRelease == kComProcessReferenceProbeUnavailable)
+        {
+            LogMessage(
+                L"lifecycle event=dll_process_attach_com_process_ref_probe "
+                L"com_process_ref_probe=unavailable module_lock=%lld",
+                GetCurrentModuleLockCount());
+            return;
+        }
+
+        LogMessage(
+            L"lifecycle event=dll_process_attach_com_process_ref_probe "
+            L"com_process_ref_probe=%lu/%lu module_lock=%lld",
+            AfterAdd,
+            AfterRelease,
+            GetCurrentModuleLockCount());
+    }
+
     static void LogCurrentState(
         const wchar_t* Reason,
         bool AllowLogFilePathInitialization = true)
@@ -506,13 +560,18 @@ namespace
 
         if (AllowLogFilePathInitialization)
         {
+            const ComServerProcessReferenceProbe ComProcessRef =
+                ProbeComServerProcessReferenceForLog();
             LogMessage(
                 L"state reason=\"%s\" module_lock=%lld "
+                L"com_process_ref_probe=%lu/%lu "
                 L"ExplorerCommandBase=%lld/%lld(balance=%lld) "
                 L"ExplorerCommandRoot=%lld/%lld(balance=%lld) "
                 L"ClassFactory=%lld/%lld(balance=%lld)",
                 Reason ? Reason : L"",
                 GetCurrentModuleLockCount(),
+                ComProcessRef.AfterAdd,
+                ComProcessRef.AfterRelease,
                 BaseCreated,
                 BaseDestroyed,
                 BaseCreated - BaseDestroyed,
@@ -527,6 +586,7 @@ namespace
         {
             LogMessageWithoutLogFilePathInitialization(
                 L"state reason=\"%s\" module_lock=%lld "
+                L"com_process_ref_probe=skipped "
                 L"ExplorerCommandBase=%lld/%lld(balance=%lld) "
                 L"ExplorerCommandRoot=%lld/%lld(balance=%lld) "
                 L"ClassFactory=%lld/%lld(balance=%lld)",
@@ -2132,26 +2192,35 @@ namespace NanaZip::ShellExtension
             {
                 wchar_t InterfaceId[64];
                 FormatGuidForLog(riid, InterfaceId, ARRAYSIZE(InterfaceId));
+                const ComServerProcessReferenceProbe RequestComProcessRef =
+                    ProbeComServerProcessReferenceForLog();
                 LogMessage(
                     L"lifecycle event=class_factory_create_instance_request "
                     L"this=%p outer=%p riid=%s riid_name=%s ppv=%p "
-                    L"module_lock=%lld",
+                    L"module_lock=%lld com_process_ref_probe=%lu/%lu",
                     this,
                     pUnkOuter,
                     InterfaceId,
                     GetKnownInterfaceNameForLog(riid),
                     ppvObject,
-                    GetCurrentModuleLockCount());
+                    GetCurrentModuleLockCount(),
+                    RequestComProcessRef.AfterAdd,
+                    RequestComProcessRef.AfterRelease);
 
                 LogLifecycleEvent(L"class_factory_create_instance_enter");
                 HRESULT Result = winrt::make<ExplorerCommandRoot>()->QueryInterface(
                     riid, ppvObject);
+                const ComServerProcessReferenceProbe ResultComProcessRef =
+                    ProbeComServerProcessReferenceForLog();
                 LogMessage(
                     L"lifecycle event=class_factory_create_instance_result "
-                    L"result=0x%08X returned_object=%p module_lock=%lld",
+                    L"result=0x%08X returned_object=%p module_lock=%lld "
+                    L"com_process_ref_probe=%lu/%lu",
                     static_cast<unsigned int>(Result),
                     ppvObject ? *ppvObject : nullptr,
-                    GetCurrentModuleLockCount());
+                    GetCurrentModuleLockCount(),
+                    ResultComProcessRef.AfterAdd,
+                    ResultComProcessRef.AfterRelease);
                 LogLifecycleResult(
                     L"class_factory_create_instance_return",
                     Result);
@@ -2223,6 +2292,7 @@ EXTERN_C HRESULT STDAPICALLTYPE DllGetClassObject(
     NANAZIP_SHELL_EXTENSION_PUBLIC_SCOPE(L"DllGetClassObject");
     try
     {
+        LogProcessAttachComProcessReferenceProbe();
         LogLifecycleEvent(L"dll_get_class_object_enter");
         wchar_t ClassId[64];
         wchar_t InterfaceId[64];
@@ -2287,6 +2357,11 @@ BOOL WINAPI DllMain(
     case DLL_PROCESS_ATTACH:
     {
         g_ProcessStartTick.store(::GetTickCount64());
+        const ComServerProcessReferenceProbe ComProcessRef =
+            ProbeComServerProcessReferenceForLog();
+        g_ProcessAttachComProcessRefAfterAdd.store(ComProcessRef.AfterAdd);
+        g_ProcessAttachComProcessRefAfterRelease.store(
+            ComProcessRef.AfterRelease);
         g_hInstance = hinstDLL;
         ::K7ModernCurrentModule = hinstDLL;
         break;

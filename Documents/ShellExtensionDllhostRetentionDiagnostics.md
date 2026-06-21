@@ -1,4 +1,4 @@
-# NanaZip Shell Extension dllhost.exe Retention Diagnostics
+﻿# NanaZip Shell Extension dllhost.exe Retention Diagnostics
 
 This note summarizes the investigation into intermittent NanaZip shell extension
 `dllhost.exe` retention that blocks local upgrades. The behavior was diagnosed
@@ -181,6 +181,39 @@ process remains alive. The host lifetime is likely governed by Explorer's or
 COM's references/cache/proxy state rather than only NanaZip's
 `DllCanUnloadNow` answer.
 
+### COM Server Process Reference Probe
+
+A hypothesis was that the host might be retained by COM's server-process
+reference count. A temporary net-zero probe was added:
+
+```cpp
+auto afterAdd = CoAddRefServerProcess();
+auto afterRelease = CoReleaseServerProcess();
+```
+
+This was logged as `com_process_ref_probe=<afterAdd>/<afterRelease>` during:
+
+- `DLL_PROCESS_ATTACH`, sampled at attach and emitted on the first safe log
+  path.
+- `ClassFactory::CreateInstance` request/result.
+- Long-running process reports.
+
+Bad runs showed `com_process_ref_probe=1/0` at process attach, both root
+activations, and the retained long-running state. For example,
+`sl/NanaZip.ShellExtension.41556.log.txt` logged:
+
+```text
+event=dll_process_attach_com_process_ref_probe com_process_ref_probe=1/0 module_lock=0
+class_factory_create_instance_request ... com_process_ref_probe=1/0
+state reason="long-running process report" module_lock=1 com_process_ref_probe=1/0 ...
+```
+
+Because the immediate release returns `0`, the public COM server-process count
+was not already held by another caller at those points. This rules out
+`CoAddRefServerProcess` / `CoReleaseServerProcess` as the hidden hold exposed
+through public COM APIs. It does not rule out lower-level COM exported object
+identity, proxy, OID/IPID, or Explorer cache state.
+
 ### WinRT/MRM Localization Thread
 
 A debugger snapshot of a retained `dllhost.exe` showed an
@@ -251,6 +284,8 @@ This is based on logs, not on confirmed Explorer source behavior.
 - C++/WinRT agile/marshal support.
 - `LockServer`, `ExplorerCommandRoot` module locking, or `DllCanUnloadNow` as
   the sole host-retention mechanism.
+- The public COM server-process reference count exposed by
+  `CoAddRefServerProcess` / `CoReleaseServerProcess`.
 - The WinRT/MRM language-change notification thread created by localization.
 - NanaZip's submenu `Open archive` command being invoked.
 
@@ -307,3 +342,9 @@ menu enumeration if the condition is too broad.
 - `sl/NanaZip.ShellExtension.45052.log.txt`: bad run after
   `IInitializeCommand`; Explorer did not call initialization and still retained
   the second root.
+- `sl/NanaZip.ShellExtension.48456.log.txt`: bad run with
+  `CoAddRefServerProcess` / `CoReleaseServerProcess` probes; runtime and
+  long-running probes returned `1/0`.
+- `sl/NanaZip.ShellExtension.41556.log.txt`: bad run with attach-time
+  COM server-process ref probe; attach, activation, and long-running probes
+  returned `1/0`.
