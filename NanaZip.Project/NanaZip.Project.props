@@ -13,12 +13,16 @@
   <PropertyGroup>
     <NanaZipBuildPreviewRelease Condition="'$(NanaZipBuildPreviewRelease)' == ''">true</NanaZipBuildPreviewRelease>
     <NanaZipBuildWithSanitizers Condition="'$(NanaZipBuildWithSanitizers)' == ''">false</NanaZipBuildWithSanitizers>
+    <NanaZipEnableSanitizers Condition="'$(NanaZipEnableSanitizers)' == ''">$(NanaZipBuildWithSanitizers)</NanaZipEnableSanitizers>
+    <EnableASAN Condition="'$(NanaZipEnableSanitizers)' == 'true'">true</EnableASAN>
   </PropertyGroup>
   <PropertyGroup>
     <NanaZipBuildNumberDate Condition="'$(NanaZipBuildNumberDate)' == ''">$([System.DateTime]::Today.ToString('yyyy-MM-dd'))</NanaZipBuildNumberDate>
     <NanaZipProjectCreationDate>2021-08-31</NanaZipProjectCreationDate>
     <MileProjectVersion>$(NanaZipMajorVersion).$(NanaZipMinorVersion).$([System.DateTime]::Parse('$(NanaZipBuildNumberDate)').Subtract($([System.DateTime]::Parse('$(NanaZipProjectCreationDate)'))).TotalDays).0</MileProjectVersion>
-    <MileProjectVersionTag Condition="'$(NanaZipBuildPreviewRelease)' == 'false'">, version $(NanaZipDisplayVersion)</MileProjectVersionTag>
-    <MileProjectVersionTag Condition="'$(MileProjectVersionTag)' == ''">Preview, version $(NanaZipDisplayVersion)</MileProjectVersionTag>
+    <MileProjectVersionTag Condition="'$(NanaZipBuildPreviewRelease)' == 'false' And '$(MileProjectUseClangCLToolset)' != 'true'">, version $(NanaZipDisplayVersion)</MileProjectVersionTag>
+    <MileProjectVersionTag Condition="'$(MileProjectVersionTag)' == '' And '$(MileProjectUseClangCLToolset)' != 'true'">Preview, version $(NanaZipDisplayVersion)</MileProjectVersionTag>
+    <MileProjectVersionTag Condition="'$(NanaZipBuildPreviewRelease)' == 'false' And '$(MileProjectUseClangCLToolset)' == 'true'">- version $(NanaZipDisplayVersion)</MileProjectVersionTag>
+    <MileProjectVersionTag Condition="'$(MileProjectVersionTag)' == '' And '$(MileProjectUseClangCLToolset)' == 'true'">Preview - version $(NanaZipDisplayVersion)</MileProjectVersionTag>
   </PropertyGroup>
 </Project>

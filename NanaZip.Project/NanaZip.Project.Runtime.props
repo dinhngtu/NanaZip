@@ -9,19 +9,39 @@
   MAINTAINER: MouriNaruto (Kenji.Mouri@outlook.com)
 -->
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup Condition="'$(NanaZipBuildWithSanitizers)' != 'true' And '$(MileProjectType)' != 'StaticLibrary'">
+  <PropertyGroup Condition="'$(NanaZipEnableSanitizers)' != 'true' And '$(MileProjectType)' != 'StaticLibrary'">
     <MileUniCrtDisableRuntimeDebuggingFeature>true</MileUniCrtDisableRuntimeDebuggingFeature>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">
-    <EnableASAN>true</EnableASAN>
+  <PropertyGroup Condition="'$(NanaZipEnableSanitizers)' == 'true' And '$(MileProjectUseClangCLToolset)' == 'true'">
+    <!-- UBSAN's function type signatures shift exported entry points by eight
+         bytes, which makes MSVC link.exe emit invalid CFG targets for DLLs. -->
+    <ClangClAdditionalOptions>-fsanitize=undefined -fno-sanitize=function,alignment $(ClangClAdditionalOptions)</ClangClAdditionalOptions>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(NanaZipBuildWithSanitizers)' != 'true'">
+  <PropertyGroup Condition="'$(NanaZipBuildWithSanitizers)' == 'true' And '$(MileProjectUseClangCLToolset)' == 'true'">
+    <LinkToolExe>link.exe</LinkToolExe>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(NanaZipEnableSanitizers)' != 'true'">
     <ClCompile>
-      <RuntimeLibrary Condition="'$(UseDebugLibraries)' == 'true'">MultiThreadedDebug</RuntimeLibrary>
-      <RuntimeLibrary Condition="'$(UseDebugLibraries)' != 'true'">MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(NanaZipBuildWithSanitizers)' != 'true' And '$(UseDebugLibraries)' == 'true'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(NanaZipBuildWithSanitizers)' != 'true' And '$(UseDebugLibraries)' != 'true'">MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(NanaZipBuildWithSanitizers)' == 'true' And '$(UseDebugLibraries)' == 'true'">MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(NanaZipBuildWithSanitizers)' == 'true' And '$(UseDebugLibraries)' != 'true'">MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemGroup Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">
+  <ItemDefinitionGroup Condition="'$(NanaZipBuildWithSanitizers)' == 'true' And '$(MileProjectUseClangCLToolset)' == 'true'">
+    <ClCompile>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(NanaZipEnableSanitizers)' == 'true' And '$(MileProjectUseClangCLToolset)' == 'true'">
+    <Link Condition="'$(MileProjectType)' != 'StaticLibrary'">
+      <AdditionalDependencies Condition="'$(Platform)' == 'ARM64'">clang_rt.asan_dynamic-aarch64.lib;clang_rt.ubsan_standalone_cxx-aarch64.lib;clang_rt.ubsan_standalone-aarch64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Platform)' == 'x64'">clang_rt.asan_dynamic-x86_64.lib;clang_rt.ubsan_standalone_cxx-x86_64.lib;clang_rt.ubsan_standalone-x86_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions Condition="'$(Platform)' == 'ARM64'">/WHOLEARCHIVE:clang_rt.asan_dynamic_runtime_thunk-aarch64.lib %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Platform)' == 'x64'">/WHOLEARCHIVE:clang_rt.asan_dynamic_runtime_thunk-x86_64.lib %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(NanaZipEnableSanitizers)' == 'true'">
     <ReferenceCopyLocalPaths Condition="'$(Platform)'=='ARM64'" Include="$(VCToolsInstallDir)bin\HostArm64\arm64\clang_rt.asan_dynamic-aarch64.dll" />
     <ReferenceCopyLocalPaths Condition="'$(Platform)'=='ARM64'" Include="$(VCToolsInstallDir)bin\HostArm64\arm64\clang_rt.asan_dynamic-aarch64.pdb" />
     <ReferenceCopyLocalPaths Condition="'$(Platform)'=='x64'" Include="$(VCToolsInstallDir)bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll" />

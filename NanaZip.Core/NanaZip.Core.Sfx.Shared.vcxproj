@@ -4,6 +4,7 @@
     <ProjectGuid>{7262BA1E-732D-4814-972F-698F0B4330A1}</ProjectGuid>
     <RootNamespace>NanaZip.Core.Sfx.Shared</RootNamespace>
     <MileProjectType>StaticLibrary</MileProjectType>
+    <MileProjectUseClangCLToolset Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">true</MileProjectUseClangCLToolset>
   </PropertyGroup>
   <Import Project="..\NanaZip.Project\NanaZip.Project.props" />
   <Import Sdk="Mile.Project.Configurations" Project="Mile.Project.Platform.x64.props" />

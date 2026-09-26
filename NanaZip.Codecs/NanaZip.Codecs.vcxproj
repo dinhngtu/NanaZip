@@ -4,6 +4,7 @@
     <ProjectGuid>{89B81A5B-FF0D-4193-9CB1-738692775DD2}</ProjectGuid>
     <RootNamespace>NanaZip.Codecs</RootNamespace>
     <MileProjectType>DynamicLibrary</MileProjectType>
+    <MileProjectUseClangCLToolset Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">true</MileProjectUseClangCLToolset>
     <WindowsTargetPlatformMinVersion>10.0.19041.0</WindowsTargetPlatformMinVersion>
     <MileProjectUseProjectProperties>true</MileProjectUseProjectProperties>
     <MileProjectCompanyName>M2-Team</MileProjectCompanyName>
@@ -527,7 +528,9 @@
   </Target>
   <Target Name="NanaZipCodecsGmSSLHardwareAccelerationBuildCSource" BeforeTargets="BeforeClCompile">
     <ItemGroup Condition="'$(Platform)' == 'x64'">
-      <ClCompile Include="GmSSL\sm3_sse.c" />
+      <ClCompile Include="GmSSL\sm3_sse.c">
+        <AdditionalOptions Condition="'$(MileProjectUseClangCLToolset)' == 'true'">-mssse3 %(AdditionalOptions)</AdditionalOptions>
+      </ClCompile>
     </ItemGroup>
     <ItemGroup Condition="'$(Platform)' == 'ARM64'">
       <ClCompile Include="GmSSL\sm3_arm64.c" />
