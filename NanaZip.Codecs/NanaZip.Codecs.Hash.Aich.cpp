@@ -500,6 +500,11 @@ namespace NanaZip::Codecs::Hash
             this->Init();
         }
 
+        Aich(const Aich&) = delete;
+        Aich& operator=(const Aich&) = delete;
+        Aich(Aich&&) = delete;
+        Aich& operator=(Aich&&) = delete;
+
         ~Aich()
         {
             ::rhash_aich_cleanup(

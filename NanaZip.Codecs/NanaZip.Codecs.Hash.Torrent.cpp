@@ -815,6 +815,11 @@ namespace NanaZip::Codecs::Hash
             this->Init();
         }
 
+        Torrent(const Torrent&) = delete;
+        Torrent& operator=(const Torrent&) = delete;
+        Torrent(Torrent&&) = delete;
+        Torrent& operator=(Torrent&&) = delete;
+
         ~Torrent()
         {
             ::bt_cleanup(
