@@ -4,6 +4,7 @@
     <ProjectGuid>{96C0A1A0-D964-4725-AFDC-73EBF7FC1416}</ProjectGuid>
     <RootNamespace>NanaZip.Core.Sfx.Console</RootNamespace>
     <MileProjectType>ConsoleApplication</MileProjectType>
+    <MileProjectUseClangCLToolset Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">true</MileProjectUseClangCLToolset>
     <MileProjectManifestFile>NanaZip.Core.Sfx.Console.manifest</MileProjectManifestFile>
     <MileProjectUseProjectProperties>true</MileProjectUseProjectProperties>
     <MileProjectCompanyName>M2-Team</MileProjectCompanyName>
@@ -19,6 +20,12 @@
   <Import Sdk="Mile.Project.Configurations" Project="Mile.Project.Cpp.Default.props" />
   <Import Sdk="Mile.Project.Configurations" Project="Mile.Project.Cpp.props" />
   <Import Project="..\NanaZip.Project\NanaZip.Project.Runtime.props" />
+  <ItemDefinitionGroup Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">
+    <ClCompile>
+      <!-- K7BaseStatic is intentionally not ASAN-instrumented in this build. -->
+      <PreprocessorDefinitions>_DISABLE_STRING_ANNOTATION;_DISABLE_VECTOR_ANNOTATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <Import Project="..\NanaZip.Core\NanaZip.Core.Sfx.Shared.props" />
   <PropertyGroup>
     <TargetName>NanaZip.Core.Console</TargetName>

@@ -4,6 +4,8 @@
     <ProjectGuid>{38BB5165-3DB0-45B7-85CE-0A72DEF5CCD6}</ProjectGuid>
     <RootNamespace>K7Base</RootNamespace>
     <MileProjectType>StaticLibrary</MileProjectType>
+    <MileProjectUseClangCLToolset Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">true</MileProjectUseClangCLToolset>
+    <NanaZipEnableSanitizers>false</NanaZipEnableSanitizers>
     <MileWindowsHelpersNoCppWinRTHelpers>true</MileWindowsHelpersNoCppWinRTHelpers>
   </PropertyGroup>
   <Import Project="..\NanaZip.Project\NanaZip.Project.props" />

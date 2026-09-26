@@ -4,6 +4,7 @@
     <ProjectGuid>{5220420B-9A5C-44A7-BE69-97F25365BB26}</ProjectGuid>
     <RootNamespace>NanaZip.Core</RootNamespace>
     <MileProjectType>DynamicLibrary</MileProjectType>
+    <MileProjectUseClangCLToolset Condition="'$(NanaZipBuildWithSanitizers)' == 'true'">true</MileProjectUseClangCLToolset>
     <WindowsTargetPlatformMinVersion>10.0.19041.0</WindowsTargetPlatformMinVersion>
     <MileProjectUseProjectProperties>true</MileProjectUseProjectProperties>
     <MileProjectCompanyName>M2-Team</MileProjectCompanyName>
