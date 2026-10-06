@@ -124,7 +124,7 @@ EXTERN_C MO_RESULT MOAPI K7BaseInitializePolicies()
     HKEY PoliciesKeyHandle = nullptr;
     if (ERROR_SUCCESS != ::RegOpenKeyExW(
         HKEY_LOCAL_MACHINE,
-        L"Software\\Policies\\M2Team\\NanaZip",
+        L"Software\\Policies\\M2Team\\NanaZip1",
         0,
         KEY_READ | KEY_WOW64_64KEY,
         &PoliciesKeyHandle))
